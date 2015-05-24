@@ -5,17 +5,17 @@
 #include <string.h>
 int yyerror(char*);
 int yylex();
- FILE* yyin; 
+ FILE* yyin;
  int jump_label = 0;
  void inst(const char *);
  void instarg(const char *,int);
  void comment(const char *);
 %}
 
-
 %union {
 	int val;
 	char signeope;
+	char comp[2];
 }
 
 %left BOPE
@@ -23,10 +23,24 @@ int yylex();
 %left ADDSUB
 %left DIVSTAR
 %left NEGATION
+%left NOELSE
+%left ELSE
 
-%token NUM BOPE CARACTERE COMP CONST DIVSTAR LACC RACC LPAR RPAR LSQB RSQB ENTIER IDENT MAIN NEGATION PRINT PV READ READCH RETURN TYPE VOID VRG EGAL IF ELSE WHILE
+%token NUM CARACTERE
+%token IDENT
+%token TYPE 
+%token <comp> COMP
+%token <signeope> ADDSUB DIVSTAR
+%token <comp> BOPE
+%token NEGATION
+%token EGAL PV VRG LPAR RPAR LACC RACC LSQB RSQB
+%token IF ELSE NOELSE WHILE
+%token PRINT READ READCH
+%token CONST ENTIER 
+%token MAIN RETURN VOID
 %type <val> NUM
-%token <signeope> ADDSUB
+%type <val> Jumpif Jumpelse
+
 
 %%
 Prog : DeclConst DeclVarPuisFonct DeclMain;
@@ -36,7 +50,9 @@ DeclConst : DeclConst CONST ListConst PV
 	;
 
 ListConst : ListConst VRG IDENT EGAL Litteral
-	| IDENT EGAL Litteral
+	| IDENT EGAL Litteral{
+
+	}
 	;
 
 Litteral : NombreSigne
@@ -97,8 +113,8 @@ SuiteInstr : SuiteInstr Instr
 InstrComp : LACC SuiteInstr RACC;
 
 Instr : LValue EGAL Exp PV
-	/*| IF LPAR Exp RPAR Instr NOELSE */
-	| IF LPAR Exp RPAR Instr ELSE Instr
+	| IF LPAR Exp RPAR Jumpif Instr %prec NOELSE{instarg("LABEL", $5);}
+	| IF LPAR Exp RPAR Jumpif Instr ELSE Jumpelse {instarg("LABEL", $5);} Instr {instarg("LABEL", $8);}
 	| WHILE LPAR Exp RPAR Instr
 	| RETURN Exp PV
 	| RETURN PV
@@ -113,7 +129,22 @@ Instr : LValue EGAL Exp PV
 	| InstrComp
 	;
 
-Arguments :ListExp
+Jumpif : {
+		comment("---Deb Jumpif");
+		inst("POP");
+		instarg("JUMPF", $$ = jump_label++);
+		comment("---Fin Jumpif");
+	}
+	;
+
+Jumpelse : {
+		comment("---Deb Jumpelse");
+		instarg("JUMP", $$ = jump_label++);
+		comment("---Fin Jumpelse");
+	}
+	;
+
+Arguments : ListExp
 	| /* rien */
 	;
 
@@ -126,19 +157,96 @@ ListExp : ListExp VRG Exp
 	;
 
 Exp : Exp ADDSUB Exp {
+		inst("POP");
+		inst("SWAP");
+		inst("POP");
+		if($2 == '+') inst("ADD");
+		else if($2 == '-') inst("SUB");
+		inst("PUSH");
+	}
+	| Exp DIVSTAR Exp {
+		inst("POP");
+		inst("SWAP");
+		inst("POP");
+		if($2 == '*') inst("MUL");
+		else if($2 == '/') inst("DIV");
+		inst("PUSH");
+	}
+	| Exp COMP Exp{
+		if(0 == strcmp($2, "<")){
+			inst("POP"); 
+			inst("SWAP"); 
+			inst("POP");
+			inst("LESS");
+			inst("PUSH");
+		}
+		else if(0 == strcmp($2, ">")){
 			inst("POP");
 			inst("SWAP");
 			inst("POP");
-			if ( $2 == '+' ) inst("ADD");
-			else if ( $2 == '-' ) inst("SUB");
+			inst("GREATER");
 			inst("PUSH");
+		}
+		else if(0 == strcmp($2, "<=")){
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("LEQ");
+			inst("PUSH");
+		}
+		else if(0 == strcmp($2, ">=")){
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("GEQ");
+			inst("PUSH");
+		}
+		else if(0 == strcmp($2, "==")){
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("EQUAL");
+			inst("PUSH");
+		}
+		else if(0 == strcmp($2, "!=")){
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("NOTEQ");
+			inst("PUSH");
+		}
 	}
-	| Exp DIVSTAR Exp
-	| Exp COMP Exp
 	| ADDSUB Exp
-	| Exp BOPE Exp
-	| NEGATION Exp
-	| LPAR Exp RPAR
+	| Exp BOPE Exp{
+		if(0 == strcmp($2, "&&")){
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("ADD");
+			inst("SWAP");
+			inst("SET 2");
+			inst("EQUAL");
+			inst("PUSH");
+		}
+		else if(0 == strcmp($2, "||")){
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("ADD");
+			inst("SWAP");
+			inst("SET 1");
+			inst("LEQ");
+			inst("PUSH");
+		}
+	}
+	| NEGATION Exp {
+		inst("POP");
+		inst("SWAP");
+		inst("SET 1");
+		inst("SUB");
+		inst("PUSH");
+	}
+	| LPAR Exp RPAR /*rien*/
 	| LValue
 	| NUM { 
 		instarg("SET", $1);
