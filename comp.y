@@ -126,7 +126,7 @@ InstrComp : LACC SuiteInstr RACC;
 Instr : LValue EGAL Exp PV{
 		setID(&ts, $1, $3);
 	}
-	| IF LPAR Exp {instarg("SET", $3);} RPAR Jumpif Instr %prec NOELSE{instarg("LABEL", $6);}
+	| IF LPAR Exp RPAR Jumpif Instr %prec NOELSE {instarg("LABEL", $5);}
 	| IF LPAR Exp RPAR Jumpif Instr ELSE Jumpelse {instarg("LABEL", $5);} Instr {instarg("LABEL", $8);}
 	| WHILE LPAR Exp RPAR Instr
 	| RETURN Exp PV
@@ -174,62 +174,39 @@ ListExp : ListExp VRG Exp
 	;
 
 Exp : Exp ADDSUB Exp {
-		instarg("SET", $1);
-		inst("SWAP");
-		instarg("SET", $3);
 		if($2 == '+') $$ = $1 + $3;
 		else if($2 == '-') $$ = $1 - $3;
+		instarg("SET", $$);
 	}
 	| Exp DIVSTAR Exp {
-		inst("POP");
-		inst("SWAP");
-		inst("POP");
-		if($2 == '*') inst("MUL");
-		else if($2 == '/') inst("DIV");
-		inst("PUSH");
+		if($2 == '*') $$ = $1 * $3;
+		else if($2 == '/') $$ = $1 / $3;
+		instarg("SET", $$);
 	}
 	| Exp COMP Exp{
 		if(0 == strcmp($2, "<")){
-			inst("POP"); 
-			inst("SWAP"); 
-			inst("POP");
-			inst("LESS");
-			inst("PUSH");
+			$$ =  $1 < $3;
+			instarg("SET", $$);
 		}
 		else if(0 == strcmp($2, ">")){
-			inst("POP");
-			inst("SWAP");
-			inst("POP");
-			inst("GREATER");
-			inst("PUSH");
+			$$ = $1 > $3;
+			instarg("SET", $$);
 		}
 		else if(0 == strcmp($2, "<=")){
-			inst("POP");
-			inst("SWAP");
-			inst("POP");
-			inst("LEQ");
-			inst("PUSH");
+			$$ =  $1 <= $3;
+			instarg("SET", $$);
 		}
 		else if(0 == strcmp($2, ">=")){
-			inst("POP");
-			inst("SWAP");
-			inst("POP");
-			inst("GEQ");
-			inst("PUSH");
+			$$ =  $1 >= $3;
+			instarg("SET", $$);
 		}
 		else if(0 == strcmp($2, "==")){
-			inst("POP");
-			inst("SWAP");
-			inst("POP");
-			inst("EQUAL");
-			inst("PUSH");
+			$$ =  $1 == $3;
+			instarg("SET", $$);
 		}
 		else if(0 == strcmp($2, "!=")){
-			inst("POP");
-			inst("SWAP");
-			inst("POP");
-			inst("NOTEQ");
-			inst("PUSH");
+			$$ =  $1 != $3;
+			instarg("SET", $$);
 		}
 	}
 	| ADDSUB Exp{
@@ -237,44 +214,37 @@ Exp : Exp ADDSUB Exp {
 	}
 	| Exp BOPE Exp{
 		if(0 == strcmp($2, "&&")){
-			inst("POP");
-			inst("SWAP");
-			inst("POP");
-			inst("ADD");
-			inst("SWAP");
-			inst("SET 2");
-			inst("EQUAL");
-			inst("PUSH");
+			$$ = $1 && $3;
+			instarg("SET", $$);
 		}
 		else if(0 == strcmp($2, "||")){
-			inst("POP");
-			inst("SWAP");
-			inst("POP");
-			inst("ADD");
-			inst("SWAP");
-			inst("SET 1");
-			inst("LEQ");
-			inst("PUSH");
+			$$ = $1 || $3;
+			instarg("SET", $$);
 		}
 	}
 	| NEGATION Exp {
-		inst("POP");
-		inst("SWAP");
-		inst("SET 1");
-		inst("SUB");
-		inst("PUSH");
+		if(0 == $2) $$ = 1;
+		else $$ = 0;
+		instarg("SET", $$);
 	}
-	| LPAR Exp RPAR /*rien*/
+	| LPAR Exp RPAR {
+		$$ = $2;
+		instarg("SET", $$);
+	}
 	| LValue{
 		getVal(&ts, $1, &$$);
+		instarg("SET", $$);
 	}
 	| NUM {
 		$$ = $1;
 		instarg("SET", $1);
-		inst("PUSH");
 	}
-	| CARACTERE
-	| IDENT LPAR Arguments RPAR
+	| CARACTERE {
+
+	}
+	| IDENT LPAR Arguments RPAR{
+
+	}
 	;
 
 %%
@@ -314,7 +284,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	ts.index = 0;
+	init(&ts);
 	yyparse();
 	endProgram();
 	return 0;
