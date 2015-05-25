@@ -19,6 +19,8 @@ int jump_lab = 0;
 ")" {return RPAR;}
 "{" {return LACC;}
 "}" {return RACC;}
+"[" {return LSQB;}
+"]" {return RSQB;}
 "print" {return PRINT;}
 "if" {return IF;}
 "else" {return ELSE;}

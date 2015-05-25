@@ -11,10 +11,13 @@ int yylex();
  FILE* yyin;
  int jump_label = 0;
  int cur_type;
+ int last_free_adr = 0;
  TS ts;
  void inst(const char *);
  void instarg(const char *, int);
  void comment(const char *);
+ void setID(TS *ts, char id[32]);
+ int getVal(TS *ts, char id[32]);
 %}
 
 %union {
@@ -46,10 +49,12 @@ int yylex();
 %token PRINT READ READCH
 %token CONST ENTIER 
 %token MAIN RETURN VOID
-%type <val> NUM Exp
+%type <val> NUM ENTIER
 %type <car> CARACTERE
+%type <val> DeclVar ListVar
 %type <val> Jumpif Jumpelse Wlabel Jumpwhile
 %type <id> LValue
+%type <type> Exp
 
 
 %%
@@ -78,16 +83,26 @@ DeclVarPuisFonct : TYPE ListVar PV DeclVarPuisFonct
 	| /* rien */
 	;
 
-ListVar : ListVar VRG Ident
-	| Ident
+ListVar : ListVar VRG Ident{
+		$$ = $1 + 1;
+		last_free_adr += 1;
+	}
+	| Ident{
+		$$ = 1;
+		last_free_adr += 1;
+	}
 	;
 
 Ident : IDENT Tab{
-		insert(&ts, cur_type, $1);
-	};
+		insert(&ts, cur_type, last_free_adr, $1);
+	}
+	;
 
-Tab : Tab LSQB ENTIER RSQB
-	| /* rien*/ 
+Tab : Tab LSQB ENTIER RSQB{
+	}
+	| /*rien*/ {
+		setSize(&ts, 1, ts.index-1);
+	} 
 	;
 
 DeclMain : EnTeteMain Corps;
@@ -112,12 +127,14 @@ ListTypVar : ListTypVar VRG TYPE IDENT
 	| TYPE IDENT
 	;
 
-Corps : LACC DeclConst DeclVar SuiteInstr RACC;
+Corps : LACC DeclConst DeclVar {instarg("ALLOC", $3);} SuiteInstr RACC
+	;
 
-DeclVar : DeclVar TYPE ListVar PV{
-		cur_type = $2;
+DeclVar : DeclVar TYPE {cur_type = $2;} ListVar PV{
+		
+		$$ += $4;
 	}
-	| /* rien */
+	| /* rien */ {}
 	;
 
 SuiteInstr : SuiteInstr Instr
@@ -127,30 +144,23 @@ SuiteInstr : SuiteInstr Instr
 InstrComp : LACC SuiteInstr RACC;
 
 Instr : LValue EGAL Exp PV{
-		Valeur val;
-		if(isalpha($3)){
-			val.caractere = $3;
-		}
-		else{
-			val.entier = $3;
-		}
-		setID(&ts, $1, val);
+		setID(&ts, $1);
 	}
 	| IF LPAR Exp RPAR Jumpif Instr %prec NOELSE {instarg("LABEL", $5);}
 	| IF LPAR Exp RPAR Jumpif Instr ELSE Jumpelse {instarg("LABEL", $5);} Instr {instarg("LABEL", $8);}
-	| WHILE Wlabel {instarg("LABEL", $2);} LPAR Exp Jumpwhile RPAR Instr {instarg("JUMP", $2); instarg("LABEL", $6);} 
+	| WHILE Wlabel {instarg("LABEL", $2);} LPAR Exp RPAR Jumpwhile Instr {instarg("JUMP", $2); instarg("LABEL", $7);} 
 	| RETURN Exp PV
 	| RETURN PV
 	| IDENT LPAR Arguments RPAR PV
 	| READ LPAR IDENT RPAR PV
 	| READCH LPAR IDENT RPAR PV
 	| PRINT LPAR Exp RPAR PV{
-		instarg("SET", $3);
-		if(isalpha($3)){
-			inst("WRITECH");
-		}
-		else{
+		inst("POP");
+		if(0 == $3){
 			inst("WRITE");
+		}
+		else if(1 == $3){
+			inst("WRITECH");
 		}
 	}
 	| PV
@@ -159,6 +169,7 @@ Instr : LValue EGAL Exp PV{
 
 Jumpif : {
 		comment("---Deb Jumpif");
+		inst("POP");
 		instarg("JUMPF", $$ = jump_label++);
 		comment("---Fin Jumpif");
 	}
@@ -172,14 +183,13 @@ Jumpelse : {
 	;
 
 Wlabel : {
-		comment("---Deb Wlabel");
 		$$ = jump_label++;
-		comment("---Fin Wlabel");
 	}
 	;
 
 Jumpwhile : {
 		comment("---Deb Jumpwhile");
+		inst("POP");
 		instarg("JUMPF", $$ = jump_label++);
 		comment("---Fin Jumpwhile");
 	}
@@ -203,40 +213,71 @@ ListExp : ListExp VRG Exp
 	;
 
 Exp : Exp ADDSUB Exp {
-		if($2 == '+') $$ = $1 + $3;
-		else if($2 == '-') $$ = $1 - $3;
-		instarg("SET", $$);
+		inst("POP");
+		inst("SWAP");
+		inst("POP");
+		if('+' == $2){
+			inst("ADD");
+		}
+		else if('-' == $2){
+			inst("SUB");
+		}
+		inst("PUSH");
 	}
 	| Exp DIVSTAR Exp {
-		if($2 == '*') $$ = $1 * $3;
-		else if($2 == '/') $$ = $1 / $3;
-		instarg("SET", $$);
+		inst("POP");
+		inst("SWAP");
+		inst("POP");
+		if('*' == $2){
+			inst("MUL");
+		}
+		else if('/' == $2){
+			inst("DIV");
+		}
+		inst("PUSH");
 	}
 	| Exp COMP Exp{
 		if(0 == strcmp($2, "<")){
-			$$ =  $1 < $3;
-			instarg("SET", $$);
+			inst("POP"); 
+			inst("SWAP"); 
+			inst("POP");
+			inst("LESS");
 			inst("PUSH");
 		}
 		else if(0 == strcmp($2, ">")){
-			$$ = $1 > $3;
-			instarg("SET", $$);
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("GREATER");
+			inst("PUSH");
 		}
 		else if(0 == strcmp($2, "<=")){
-			$$ =  $1 <= $3;
-			instarg("SET", $$);
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("LEQ");
+			inst("PUSH");
 		}
 		else if(0 == strcmp($2, ">=")){
-			$$ =  $1 >= $3;
-			instarg("SET", $$);
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("GEQ");
+			inst("PUSH");
 		}
 		else if(0 == strcmp($2, "==")){
-			$$ =  $1 == $3;
-			instarg("SET", $$);
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("EQUAL");
+			inst("PUSH");
 		}
 		else if(0 == strcmp($2, "!=")){
-			$$ =  $1 != $3;
-			instarg("SET", $$);
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("NOTEQ");
+			inst("PUSH");
 		}
 	}
 	| ADDSUB Exp{
@@ -244,44 +285,48 @@ Exp : Exp ADDSUB Exp {
 	}
 	| Exp BOPE Exp{
 		if(0 == strcmp($2, "&&")){
-			$$ = $1 && $3;
-			instarg("SET", $$);
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("ADD");
+			inst("SWAP");
+			inst("SET 2");
+			inst("EQUAL");
+			inst("PUSH");
 		}
 		else if(0 == strcmp($2, "||")){
-			$$ = $1 || $3;
-			instarg("SET", $$);
+			inst("POP");
+			inst("SWAP");
+			inst("POP");
+			inst("ADD");
+			inst("SWAP");
+			inst("SET 1");
+			inst("LEQ");
+			inst("PUSH");
 		}
 	}
 	| NEGATION Exp {
-		if(0 == $2) $$ = 1;
-		else $$ = 0;
-		instarg("SET", $$);
+		inst("POP");
+		inst("SWAP");
+		inst("SET 1");
+		inst("SUB");
+		inst("PUSH");
 	}
 	| LPAR Exp RPAR {
-		$$ = $2;
-		instarg("SET", $$);
+
 	}
 	| LValue{
-		Valeur val;
-		int type;
-		type = getVal(&ts, $1, &val);
-		switch(type){
-		case 0:
-			$$ = val.entier;
-			break;
-		case 1:
-			$$ = val.caractere;
-			break;	
-		}
-		instarg("SET", $$);
+		$$ = getVal(&ts, $1);
 	}
 	| NUM {
-		$$ = $1;
 		instarg("SET", $1);
+		inst("PUSH");
+		$$ = 0;
 	}
 	| CARACTERE {
-		$$ = $1;
 		instarg("SET", $1);
+		inst("PUSH");
+		$$ = 1;
 	}
 	| IDENT LPAR Arguments RPAR{
 
@@ -309,6 +354,38 @@ void instarg(const char *s,int n){
 
 void comment(const char *s){
 	printf("#%s\n",s);
+}
+
+void setID(TS *ts, char id[32]){
+	int i, adr;
+
+	comment("---DEB setID");
+	if(-1 == (i = contains(ts, id))){
+		fprintf(stderr, "Erreur : set ID %s inconnu.\n", id);
+		exit(EXIT_FAILURE);
+	}
+	adr = ts->table[i].adresse;
+	instarg("SET", adr);
+	inst("SWAP");
+	inst("POP");
+	inst("SAVE");
+	comment("---FIN setID");
+}
+
+int getVal(TS *ts, char id[32]){
+	int i, adr;
+
+	comment("---DEB getVal");
+	if(-1 == (i = contains(ts, id))){
+		fprintf(stderr, "Erreur : get ID %s inconnu.\n", id);
+		exit(EXIT_FAILURE);
+	}
+	adr = ts->table[i].adresse;
+	instarg("SET", adr);
+	inst("LOAD");
+	inst("PUSH");
+	comment("---FIN getVal");
+	return ts->table[i].type;
 }
 
 int main(int argc, char** argv) {
