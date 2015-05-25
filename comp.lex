@@ -21,6 +21,10 @@ int jump_lab = 0;
 "if" {return IF;}
 "print" {return PRINT;}
 "else" {return ELSE;}
-"entier"|"caractere" {return IDENT;}
+"entier" {yylval.type = 0; return TYPE;}
+"caractere" {yylval.type = 1; return TYPE;}
+[a-zA-Z][a-zA-Z0-9_]* {sscanf(yytext, "%32s", yylval.id); return IDENT;}
+"=" {return EGAL;}
+"," {return VRG;}
 . return yytext[0];
 %%

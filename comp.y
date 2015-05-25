@@ -3,12 +3,16 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include "table_symboles.h"
+
 int yyerror(char*);
 int yylex();
  FILE* yyin;
  int jump_label = 0;
+ int cur_type;
+ TS ts;
  void inst(const char *);
- void instarg(const char *,int);
+ void instarg(const char *, int);
  void comment(const char *);
 %}
 
@@ -16,6 +20,8 @@ int yylex();
 	int val;
 	char signeope;
 	char comp[2];
+	int type;
+	char id[32];
 }
 
 %left BOPE
@@ -27,8 +33,8 @@ int yylex();
 %left ELSE
 
 %token NUM CARACTERE
-%token IDENT
-%token TYPE 
+%token <id> IDENT
+%token <type> TYPE 
 %token <comp> COMP
 %token <signeope> ADDSUB DIVSTAR
 %token <comp> BOPE
@@ -38,8 +44,9 @@ int yylex();
 %token PRINT READ READCH
 %token CONST ENTIER 
 %token MAIN RETURN VOID
-%type <val> NUM
+%type <val> NUM Exp
 %type <val> Jumpif Jumpelse
+%type <id> LValue
 
 
 %%
@@ -51,7 +58,7 @@ DeclConst : DeclConst CONST ListConst PV
 
 ListConst : ListConst VRG IDENT EGAL Litteral
 	| IDENT EGAL Litteral{
-
+		
 	}
 	;
 
@@ -72,10 +79,12 @@ ListVar : ListVar VRG Ident
 	| Ident
 	;
 
-Ident : IDENT Tab;
+Ident : IDENT Tab{
+		insert(&ts, cur_type, $1, 0);
+	};
 
 Tab : Tab LSQB ENTIER RSQB
-	| /* rien */
+	| /* rien*/ 
 	;
 
 DeclMain : EnTeteMain Corps;
@@ -102,7 +111,9 @@ ListTypVar : ListTypVar VRG TYPE IDENT
 
 Corps : LACC DeclConst DeclVar SuiteInstr RACC;
 
-DeclVar : DeclVar TYPE ListVar PV
+DeclVar : DeclVar TYPE ListVar PV{
+		cur_type = $2;
+	}
 	| /* rien */
 	;
 
@@ -112,8 +123,10 @@ SuiteInstr : SuiteInstr Instr
 
 InstrComp : LACC SuiteInstr RACC;
 
-Instr : LValue EGAL Exp PV
-	| IF LPAR Exp RPAR Jumpif Instr %prec NOELSE{instarg("LABEL", $5);}
+Instr : LValue EGAL Exp PV{
+		setID(&ts, $1, $3);
+	}
+	| IF LPAR Exp {instarg("SET", $3);} RPAR Jumpif Instr %prec NOELSE{instarg("LABEL", $6);}
 	| IF LPAR Exp RPAR Jumpif Instr ELSE Jumpelse {instarg("LABEL", $5);} Instr {instarg("LABEL", $8);}
 	| WHILE LPAR Exp RPAR Instr
 	| RETURN Exp PV
@@ -122,7 +135,7 @@ Instr : LValue EGAL Exp PV
 	| READ LPAR IDENT RPAR PV
 	| READCH LPAR IDENT RPAR PV
 	| PRINT LPAR Exp RPAR PV{
-		inst("POP");
+		instarg("SET", $3);
 		inst("WRITE");
 	}
 	| PV
@@ -131,7 +144,6 @@ Instr : LValue EGAL Exp PV
 
 Jumpif : {
 		comment("---Deb Jumpif");
-		inst("POP");
 		instarg("JUMPF", $$ = jump_label++);
 		comment("---Fin Jumpif");
 	}
@@ -148,21 +160,25 @@ Arguments : ListExp
 	| /* rien */
 	;
 
-LValue : IDENT TabExp;
+LValue : IDENT TabExp{
+		strncpy($$, $1, 32);
+	}
+	;
 
-TabExp : TabExp LSQB Exp RSQB;
+TabExp : TabExp LSQB Exp RSQB
+	| /*rien*/
+	;
 
 ListExp : ListExp VRG Exp
 	| Exp
 	;
 
 Exp : Exp ADDSUB Exp {
-		inst("POP");
+		instarg("SET", $1);
 		inst("SWAP");
-		inst("POP");
-		if($2 == '+') inst("ADD");
-		else if($2 == '-') inst("SUB");
-		inst("PUSH");
+		instarg("SET", $3);
+		if($2 == '+') $$ = $1 + $3;
+		else if($2 == '-') $$ = $1 - $3;
 	}
 	| Exp DIVSTAR Exp {
 		inst("POP");
@@ -216,7 +232,9 @@ Exp : Exp ADDSUB Exp {
 			inst("PUSH");
 		}
 	}
-	| ADDSUB Exp
+	| ADDSUB Exp{
+
+	}
 	| Exp BOPE Exp{
 		if(0 == strcmp($2, "&&")){
 			inst("POP");
@@ -247,8 +265,11 @@ Exp : Exp ADDSUB Exp {
 		inst("PUSH");
 	}
 	| LPAR Exp RPAR /*rien*/
-	| LValue
-	| NUM { 
+	| LValue{
+		getVal(&ts, $1, &$$);
+	}
+	| NUM {
+		$$ = $1;
 		instarg("SET", $1);
 		inst("PUSH");
 	}
@@ -259,39 +280,43 @@ Exp : Exp ADDSUB Exp {
 %%
 
 int yyerror(char* s) {
-  fprintf(stderr,"%s\n",s);
-  return 0;
+	fprintf(stderr,"%s\n",s);
+	return 0;
 }
 
 void endProgram() {
-  printf("HALT\n");
+	printf("HALT\n");
 }
 
 void inst(const char *s){
-  printf("%s\n",s);
+	printf("%s\n",s);
 }
 
 void instarg(const char *s,int n){
-  printf("%s\t%d\n",s,n);
+	printf("%s\t%d\n",s,n);
 }
 
 void comment(const char *s){
-  printf("#%s\n",s);
+	printf("#%s\n",s);
 }
 
 int main(int argc, char** argv) {
-  if(argc==2){
-    yyin = fopen(argv[1],"r");
-  }
-  else if(argc==1){
-    yyin = stdin;
-  }
-  else{
-    fprintf(stderr,"usage: %s [src]\n",argv[0]);
-    return 1;
-  }
-  yyparse();
-  endProgram();
-  return 0;
+	if(argc==2){
+		yyin = fopen(argv[1],"r");
+	}
+
+	else if(argc==1){
+		yyin = stdin;
+	}
+
+	else{
+		fprintf(stderr,"usage: %s [src]\n",argv[0]);
+		return 1;
+	}
+
+	ts.index = 0;
+	yyparse();
+	endProgram();
+	return 0;
 }
 
