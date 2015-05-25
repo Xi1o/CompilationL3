@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <ctype.h>
 #include "table_symboles.h"
 
 int yyerror(char*);
@@ -18,6 +19,7 @@ int yylex();
 
 %union {
 	int val;
+	char car;
 	char signeope;
 	char comp[2];
 	int type;
@@ -45,7 +47,8 @@ int yylex();
 %token CONST ENTIER 
 %token MAIN RETURN VOID
 %type <val> NUM Exp
-%type <val> Jumpif Jumpelse
+%type <car> CARACTERE
+%type <val> Jumpif Jumpelse Wlabel Jumpwhile
 %type <id> LValue
 
 
@@ -80,7 +83,7 @@ ListVar : ListVar VRG Ident
 	;
 
 Ident : IDENT Tab{
-		insert(&ts, cur_type, $1, 0);
+		insert(&ts, cur_type, $1);
 	};
 
 Tab : Tab LSQB ENTIER RSQB
@@ -124,11 +127,18 @@ SuiteInstr : SuiteInstr Instr
 InstrComp : LACC SuiteInstr RACC;
 
 Instr : LValue EGAL Exp PV{
-		setID(&ts, $1, $3);
+		Valeur val;
+		if(isalpha($3)){
+			val.caractere = $3;
+		}
+		else{
+			val.entier = $3;
+		}
+		setID(&ts, $1, val);
 	}
 	| IF LPAR Exp RPAR Jumpif Instr %prec NOELSE {instarg("LABEL", $5);}
 	| IF LPAR Exp RPAR Jumpif Instr ELSE Jumpelse {instarg("LABEL", $5);} Instr {instarg("LABEL", $8);}
-	| WHILE LPAR Exp RPAR Instr
+	| WHILE Wlabel {instarg("LABEL", $2);} LPAR Exp Jumpwhile RPAR Instr {instarg("JUMP", $2); instarg("LABEL", $6);} 
 	| RETURN Exp PV
 	| RETURN PV
 	| IDENT LPAR Arguments RPAR PV
@@ -136,7 +146,12 @@ Instr : LValue EGAL Exp PV{
 	| READCH LPAR IDENT RPAR PV
 	| PRINT LPAR Exp RPAR PV{
 		instarg("SET", $3);
-		inst("WRITE");
+		if(isalpha($3)){
+			inst("WRITECH");
+		}
+		else{
+			inst("WRITE");
+		}
 	}
 	| PV
 	| InstrComp
@@ -153,6 +168,20 @@ Jumpelse : {
 		comment("---Deb Jumpelse");
 		instarg("JUMP", $$ = jump_label++);
 		comment("---Fin Jumpelse");
+	}
+	;
+
+Wlabel : {
+		comment("---Deb Wlabel");
+		$$ = jump_label++;
+		comment("---Fin Wlabel");
+	}
+	;
+
+Jumpwhile : {
+		comment("---Deb Jumpwhile");
+		instarg("JUMPF", $$ = jump_label++);
+		comment("---Fin Jumpwhile");
 	}
 	;
 
@@ -187,6 +216,7 @@ Exp : Exp ADDSUB Exp {
 		if(0 == strcmp($2, "<")){
 			$$ =  $1 < $3;
 			instarg("SET", $$);
+			inst("PUSH");
 		}
 		else if(0 == strcmp($2, ">")){
 			$$ = $1 > $3;
@@ -232,7 +262,17 @@ Exp : Exp ADDSUB Exp {
 		instarg("SET", $$);
 	}
 	| LValue{
-		getVal(&ts, $1, &$$);
+		Valeur val;
+		int type;
+		type = getVal(&ts, $1, &val);
+		switch(type){
+		case 0:
+			$$ = val.entier;
+			break;
+		case 1:
+			$$ = val.caractere;
+			break;	
+		}
 		instarg("SET", $$);
 	}
 	| NUM {
@@ -240,7 +280,8 @@ Exp : Exp ADDSUB Exp {
 		instarg("SET", $1);
 	}
 	| CARACTERE {
-
+		$$ = $1;
+		instarg("SET", $1);
 	}
 	| IDENT LPAR Arguments RPAR{
 

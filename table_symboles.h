@@ -6,11 +6,16 @@
 #define ENT 0
 #define CARAC 1
 
+typedef union{
+  int entier;
+  char caractere;
+}Valeur;
+
 typedef struct{
   char id[MAX_ID];
   int type;
   int taille;
-  int valeur;
+  Valeur valeur;
 }Symbole;
 
 typedef struct{
@@ -20,12 +25,12 @@ typedef struct{
 
 void init(TS *ts);
 
-void insert(TS *ts, int type, char id[MAX_ID], int valeur);
+void insert(TS *ts, int type, char id[MAX_ID]);
 
 int contains(TS *ts, char id[MAX_ID]);
 
-int getVal(TS *ts, char id[MAX_ID], int *val);
+int getVal(TS *ts, char id[MAX_ID], Valeur *val);
 
-int setID(TS *ts, char id[MAX_ID], int newval);
+int setID(TS *ts, char id[MAX_ID], Valeur newval);
 
 #endif

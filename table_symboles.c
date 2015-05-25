@@ -7,21 +7,12 @@ void init(TS *ts){
   ts->index = 0;
 }
 
-void insert(TS *ts, int type, char id[MAX_ID], int valeur){
+void insert(TS *ts, int type, char id[MAX_ID]){
   if(-1 != contains(ts, id)){
     fprintf(stderr, "Erreur : ID %s déjà existant.\n", id);
     exit(EXIT_FAILURE);
   }
-  switch(type){
-  case ENT:
-    ts->table[ts->index].valeur = valeur;
-    break;
-  case CARAC:
-    break;
-  default:
-    fprintf(stderr, "Unknown type.\n");
-    exit(EXIT_FAILURE);
-  }
+
   ts->table[ts->index].type = type;
   strncpy(ts->table[ts->index].id, id, MAX_ID);
   ts->table[ts->index].type = type;
@@ -39,24 +30,42 @@ int contains(TS *ts, char id[MAX_ID]){
   return -1;
 }
 
-int getVal(TS *ts, char id[MAX_ID], int *val){
+int getVal(TS *ts, char id[MAX_ID], Valeur *val){
   int i;
 
   if(-1 == (i = contains(ts, id))){
-    fprintf(stderr, "Erreur : ID %s inconnu.\n", id);
-    return 0;
+    fprintf(stderr, "Erreur : get ID '%s' inconnu.\n", id);
+    exit(EXIT_FAILURE);
   }
-  *val = ts->table[i].valeur;
-  return 1;
+  switch(ts->table[i].type){
+  case ENT:
+    val->entier = ts->table[i].valeur.entier;
+    break;
+  case CARAC:
+    break;
+  default:
+    fprintf(stderr, "Erreur : type inconnu.");
+    exit(EXIT_FAILURE);
+  }
+  return ts->table[i].type;
 }
 
-int setID(TS *ts, char id[MAX_ID], int newval){
+int setID(TS *ts, char id[MAX_ID], Valeur newval){
   int i;
   
   if(-1 == (i = contains(ts, id))){
-    fprintf(stderr, "Erreur : ID %s inconnu.\n", id);
+    fprintf(stderr, "Erreur : set ID '%s' inconnu.\n", id);
     return 0;
   }
-  ts->table[i].valeur = newval;
+  switch(ts->table[i].type){
+  case ENT:
+    ts->table[i].valeur.entier = newval.entier;
+    break;
+  case CARAC:
+    break;
+  default:
+    fprintf(stderr, "Erreur : type inconnu.");
+    exit(EXIT_FAILURE);
+  }
   return 1;
 }
