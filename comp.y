@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <ctype.h>
 #include "table_symboles.h"
 
 int yyerror(char*);
@@ -10,14 +11,18 @@ int yylex();
  FILE* yyin;
  int jump_label = 0;
  int cur_type;
+ int last_free_adr = 0;
  TS ts;
  void inst(const char *);
  void instarg(const char *, int);
  void comment(const char *);
+ void setID(TS *ts, char id[32]);
+ int getVal(TS *ts, char id[32]);
 %}
 
 %union {
 	int val;
+	char car;
 	char signeope;
 	char comp[2];
 	int type;
@@ -44,9 +49,12 @@ int yylex();
 %token PRINT READ READCH
 %token CONST ENTIER 
 %token MAIN RETURN VOID
-%type <val> NUM Exp
-%type <val> Jumpif Jumpelse
+%type <val> NUM ENTIER
+%type <car> CARACTERE
+%type <val> DeclVar ListVar
+%type <val> Jumpif Jumpelse Wlabel Jumpwhile
 %type <id> LValue
+%type <type> Exp
 
 
 %%
@@ -75,16 +83,26 @@ DeclVarPuisFonct : TYPE ListVar PV DeclVarPuisFonct
 	| /* rien */
 	;
 
-ListVar : ListVar VRG Ident
-	| Ident
+ListVar : ListVar VRG Ident{
+		$$ = $1 + 1;
+		last_free_adr += 1;
+	}
+	| Ident{
+		$$ = 1;
+		last_free_adr += 1;
+	}
 	;
 
 Ident : IDENT Tab{
-		insert(&ts, cur_type, $1, 0);
-	};
+		insert(&ts, cur_type, last_free_adr, $1);
+	}
+	;
 
-Tab : Tab LSQB ENTIER RSQB
-	| /* rien*/ 
+Tab : Tab LSQB ENTIER RSQB{
+	}
+	| /*rien*/ {
+		setSize(&ts, 1, ts.index-1);
+	} 
 	;
 
 DeclMain : EnTeteMain Corps;
@@ -109,12 +127,14 @@ ListTypVar : ListTypVar VRG TYPE IDENT
 	| TYPE IDENT
 	;
 
-Corps : LACC DeclConst DeclVar SuiteInstr RACC;
+Corps : LACC DeclConst DeclVar {instarg("ALLOC", $3);} SuiteInstr RACC
+	;
 
-DeclVar : DeclVar TYPE ListVar PV{
-		cur_type = $2;
+DeclVar : DeclVar TYPE {cur_type = $2;} ListVar PV{
+		
+		$$ += $4;
 	}
-	| /* rien */
+	| /* rien */ {}
 	;
 
 SuiteInstr : SuiteInstr Instr
@@ -124,19 +144,24 @@ SuiteInstr : SuiteInstr Instr
 InstrComp : LACC SuiteInstr RACC;
 
 Instr : LValue EGAL Exp PV{
-		setID(&ts, $1, $3);
+		setID(&ts, $1);
 	}
-	| IF LPAR Exp {instarg("SET", $3);} RPAR Jumpif Instr %prec NOELSE{instarg("LABEL", $6);}
+	| IF LPAR Exp RPAR Jumpif Instr %prec NOELSE {instarg("LABEL", $5);}
 	| IF LPAR Exp RPAR Jumpif Instr ELSE Jumpelse {instarg("LABEL", $5);} Instr {instarg("LABEL", $8);}
-	| WHILE LPAR Exp RPAR Instr
+	| WHILE Wlabel {instarg("LABEL", $2);} LPAR Exp RPAR Jumpwhile Instr {instarg("JUMP", $2); instarg("LABEL", $7);} 
 	| RETURN Exp PV
 	| RETURN PV
 	| IDENT LPAR Arguments RPAR PV
 	| READ LPAR IDENT RPAR PV
 	| READCH LPAR IDENT RPAR PV
 	| PRINT LPAR Exp RPAR PV{
-		instarg("SET", $3);
-		inst("WRITE");
+		inst("POP");
+		if(0 == $3){
+			inst("WRITE");
+		}
+		else if(1 == $3){
+			inst("WRITECH");
+		}
 	}
 	| PV
 	| InstrComp
@@ -144,6 +169,7 @@ Instr : LValue EGAL Exp PV{
 
 Jumpif : {
 		comment("---Deb Jumpif");
+		inst("POP");
 		instarg("JUMPF", $$ = jump_label++);
 		comment("---Fin Jumpif");
 	}
@@ -153,6 +179,19 @@ Jumpelse : {
 		comment("---Deb Jumpelse");
 		instarg("JUMP", $$ = jump_label++);
 		comment("---Fin Jumpelse");
+	}
+	;
+
+Wlabel : {
+		$$ = jump_label++;
+	}
+	;
+
+Jumpwhile : {
+		comment("---Deb Jumpwhile");
+		inst("POP");
+		instarg("JUMPF", $$ = jump_label++);
+		comment("---Fin Jumpwhile");
 	}
 	;
 
@@ -174,18 +213,27 @@ ListExp : ListExp VRG Exp
 	;
 
 Exp : Exp ADDSUB Exp {
-		instarg("SET", $1);
+		inst("POP");
 		inst("SWAP");
-		instarg("SET", $3);
-		if($2 == '+') $$ = $1 + $3;
-		else if($2 == '-') $$ = $1 - $3;
+		inst("POP");
+		if('+' == $2){
+			inst("ADD");
+		}
+		else if('-' == $2){
+			inst("SUB");
+		}
+		inst("PUSH");
 	}
 	| Exp DIVSTAR Exp {
 		inst("POP");
 		inst("SWAP");
 		inst("POP");
-		if($2 == '*') inst("MUL");
-		else if($2 == '/') inst("DIV");
+		if('*' == $2){
+			inst("MUL");
+		}
+		else if('/' == $2){
+			inst("DIV");
+		}
 		inst("PUSH");
 	}
 	| Exp COMP Exp{
@@ -264,17 +312,25 @@ Exp : Exp ADDSUB Exp {
 		inst("SUB");
 		inst("PUSH");
 	}
-	| LPAR Exp RPAR /*rien*/
+	| LPAR Exp RPAR {
+
+	}
 	| LValue{
-		getVal(&ts, $1, &$$);
+		$$ = getVal(&ts, $1);
 	}
 	| NUM {
-		$$ = $1;
 		instarg("SET", $1);
 		inst("PUSH");
+		$$ = 0;
 	}
-	| CARACTERE
-	| IDENT LPAR Arguments RPAR
+	| CARACTERE {
+		instarg("SET", $1);
+		inst("PUSH");
+		$$ = 1;
+	}
+	| IDENT LPAR Arguments RPAR{
+
+	}
 	;
 
 %%
@@ -300,6 +356,38 @@ void comment(const char *s){
 	printf("#%s\n",s);
 }
 
+void setID(TS *ts, char id[32]){
+	int i, adr;
+
+	comment("---DEB setID");
+	if(-1 == (i = contains(ts, id))){
+		fprintf(stderr, "Erreur : set ID %s inconnu.\n", id);
+		exit(EXIT_FAILURE);
+	}
+	adr = ts->table[i].adresse;
+	instarg("SET", adr);
+	inst("SWAP");
+	inst("POP");
+	inst("SAVE");
+	comment("---FIN setID");
+}
+
+int getVal(TS *ts, char id[32]){
+	int i, adr;
+
+	comment("---DEB getVal");
+	if(-1 == (i = contains(ts, id))){
+		fprintf(stderr, "Erreur : get ID %s inconnu.\n", id);
+		exit(EXIT_FAILURE);
+	}
+	adr = ts->table[i].adresse;
+	instarg("SET", adr);
+	inst("LOAD");
+	inst("PUSH");
+	comment("---FIN getVal");
+	return ts->table[i].type;
+}
+
 int main(int argc, char** argv) {
 	if(argc==2){
 		yyin = fopen(argv[1],"r");
@@ -314,7 +402,7 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	ts.index = 0;
+	init(&ts);
 	yyparse();
 	endProgram();
 	return 0;

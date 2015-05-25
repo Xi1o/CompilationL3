@@ -10,7 +10,7 @@ typedef struct{
   char id[MAX_ID];
   int type;
   int taille;
-  int valeur;
+  int adresse;
 }Symbole;
 
 typedef struct{
@@ -20,12 +20,10 @@ typedef struct{
 
 void init(TS *ts);
 
-void insert(TS *ts, int type, char id[MAX_ID], int valeur);
+void insert(TS *ts, int type, int adresse, char id[MAX_ID]);
+
+void setSize(TS *ts, int taille, int index);
 
 int contains(TS *ts, char id[MAX_ID]);
-
-int getVal(TS *ts, char id[MAX_ID], int *val);
-
-int setID(TS *ts, char id[MAX_ID], int newval);
 
 #endif
