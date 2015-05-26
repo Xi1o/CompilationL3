@@ -152,8 +152,16 @@ Instr : LValue EGAL Exp PV{
 	| RETURN Exp PV
 	| RETURN PV
 	| IDENT LPAR Arguments RPAR PV
-	| READ LPAR IDENT RPAR PV
-	| READCH LPAR IDENT RPAR PV
+	| READ LPAR IDENT RPAR PV {
+		inst("READ");
+		inst("PUSH");
+		setID(&ts, $3);
+	}
+	| READCH LPAR IDENT RPAR PV {
+		inst("READCH");
+		inst("PUSH");
+		setID(&ts, $3);
+	}
 	| PRINT LPAR Exp RPAR PV{
 		inst("POP");
 		if(0 == $3){
@@ -237,6 +245,7 @@ Exp : Exp ADDSUB Exp {
 		inst("PUSH");
 	}
 	| Exp COMP Exp{
+		comment("---Comparaison");
 		if(0 == strcmp($2, "<")){
 			inst("POP"); 
 			inst("SWAP"); 
@@ -361,7 +370,7 @@ void setID(TS *ts, char id[32]){
 
 	comment("---DEB setID");
 	if(-1 == (i = contains(ts, id))){
-		fprintf(stderr, "Erreur : set ID %s inconnu.\n", id);
+		fprintf(stderr, "Erreur : set ID <%s> inconnu.\n", id);
 		exit(EXIT_FAILURE);
 	}
 	adr = ts->table[i].adresse;
@@ -377,7 +386,7 @@ int getVal(TS *ts, char id[32]){
 
 	comment("---DEB getVal");
 	if(-1 == (i = contains(ts, id))){
-		fprintf(stderr, "Erreur : get ID %s inconnu.\n", id);
+		fprintf(stderr, "Erreur : get ID <%s> inconnu.\n", id);
 		exit(EXIT_FAILURE);
 	}
 	adr = ts->table[i].adresse;
