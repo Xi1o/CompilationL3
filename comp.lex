@@ -1,12 +1,18 @@
 %{
 #include "comp.h"
-int jump_lab = 0;
+
+void lyyerror(YYLTYPE *locp, const char *str){
+	fprintf(stderr, "Erreur\n");
+	exit(EXIT_FAILURE);
+}
 %}
 
 %%
 [ \t\n]+ ;
+"/*".*?"*/" ;
+
 [0-9]+ {sscanf(yytext, "%d", &yylval.val); return NUM;}
-"'"[a-zA-Z]"'" {yylval.car = yytext[1]; return CARACTERE;}
+"'"."'" {yylval.car = yytext[1]; return CARACTERE;}
 [+-] {sscanf(yytext, "%c", &yylval.signeope); return ADDSUB;}
 [*/] {sscanf(yytext, "%c", &yylval.signeope); return DIVSTAR;}
 [<>]|"=="|"!="|"<="|">=" {sscanf(yytext, "%2s", yylval.comp); return COMP;}
@@ -14,6 +20,7 @@ int jump_lab = 0;
 "!" {return NEGATION;}
 "main" {return MAIN;}
 "print" {return PRINT;}
+"const" {return CONST;}
 ";" {return PV;}
 "(" {return LPAR;}
 ")" {return RPAR;}
@@ -22,6 +29,8 @@ int jump_lab = 0;
 "[" {return LSQB;}
 "]" {return RSQB;}
 "print" {return PRINT;}
+"read" {return READ;}
+"readch" {return READCH;}
 "if" {return IF;}
 "else" {return ELSE;}
 "while" {return WHILE;}

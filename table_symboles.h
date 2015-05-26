@@ -4,7 +4,9 @@
 #define MAX_ID 32
 #define MAX_TABLE 1024
 #define ENT 0
-#define CARAC 1
+#define CARAC 1 
+#define CONSTENT 2
+#define CONSTCAR 3
 
 typedef struct{
   char id[MAX_ID];
