@@ -20,7 +20,13 @@ typedef struct{
   int index; /*index 1ere case vide*/
 }TS;
 
-void init(TS *ts);
+void initTables(TS **ts);
+
+void freeTables(TS **ts);
+
+void addTable(TS **ts, int newlen);
+
+void removeTable(TS **ts, int newlen);
 
 void insert(TS *ts, int type, int adresse, char id[MAX_ID]);
 

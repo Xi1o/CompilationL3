@@ -1,6 +1,9 @@
 CC = gcc
-CFLAGS = -Wall
-LDFLAGS = -Wall -lfl
+DBG = yes
+ifeq ($(DBG), yes)
+	CFLAGS = -g -Wall
+endif
+LDFLAGS = -lfl
 EXEC = comp
 
 all: $(EXEC) clean

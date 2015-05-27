@@ -3,8 +3,52 @@
 #include <string.h>
 #include <stdlib.h>
 
-void init(TS *ts){
+/**
+ * Met l'index de la table des symboles à 0.
+ **/
+static void init(TS *ts){
   ts->index = 0;
+}
+
+/**
+ * Réalloue la table des symboles à la taille newlen.
+ */
+static void editTable(TS **ts, int newlen){
+  TS *new_ts;
+
+  new_ts = (TS*) realloc(*ts, sizeof(TS)*newlen);
+  if(!new_ts){
+    fprintf(stderr, "Erreur ajout table.\n");
+    exit(EXIT_FAILURE);
+  }
+  *ts = new_ts;
+}
+
+void initTables(TS **ts){
+  /*Alloue 2 tables des symboles (globale et main).*/
+  *ts = (TS*) malloc(sizeof(TS)*2);
+  if(!*ts){
+    fprintf(stderr, "Erreur allocations tables.\n");
+    exit(EXIT_FAILURE);
+  }
+  /*Initialise la table des globales.*/
+  init(*ts);
+  /*Initialise la table du main.*/
+  init(*ts+1);
+}
+
+void freeTables(TS **ts){
+  free(*ts);
+}
+
+void addTable(TS **ts, int newlen){
+  editTable(ts, newlen);
+  /*Initialise la nouvelle table.*/
+  init(*ts+newlen-1);
+}
+
+void removeTable(TS **ts, int newlen){
+  editTable(ts, newlen);
 }
 
 void insert(TS *ts, int type, int adresse, char id[MAX_ID]){

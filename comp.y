@@ -10,11 +10,12 @@
 	int yylex();
 	int yylineno;
 	FILE* yyin;
-	int jump_label = 0;
-	int cur_type;
-	int last_free_adr = 0;
-	TS ts_main;
-	TS *cur_ts;
+	int jump_label = 0; /*Valeur premier label.*/
+	int cur_type; /*Type de la variable actuelle.*/
+	int last_free_adr = 0; /*Adresse pile libre disponible.*/
+	TS *ts; /*Tableau de table des symboles.*/
+	TS *cur_ts; /*Pointeur table des symboles actuelle.*/
+	int i_cur_ts = 1; /*Indice table symbole actuelle.*/
 	void inst(const char *);
 	void instarg(const char *, int);
 	void comment(const char *);
@@ -26,6 +27,7 @@
 
 %code requires {
 	#define MAXID 32
+	#define GLOB 0
 }
 
 %union {
@@ -71,7 +73,7 @@ Prog : DeclConst DeclVarPuisFonct DeclMain;
 DeclConst : DeclConst CONST ListConst PV{
 		$$ += $3;
 	}
-	| /* rien */ {};
+	| /* rien */ {$$ = 0;};
 
 ListConst : ListConst VRG IDENT EGAL {instarg("ALLOC", 1);} Litteral{
 		$$ = $1 + 1;
@@ -109,7 +111,9 @@ NombreSigne : NUM {
 		inst("PUSH");
 	};
 
-DeclVarPuisFonct : TYPE ListVar PV DeclVarPuisFonct
+DeclVarPuisFonct : TYPE ListVar PV DeclVarPuisFonct{
+		instarg("ALLOC", $2);
+	}
 	| DeclFonct
 	| /* rien */;
 
@@ -137,7 +141,7 @@ DeclMain : EnTeteMain Corps{
 	};
 
 EnTeteMain : MAIN LPAR RPAR{
-		cur_ts = &ts_main;
+		cur_ts = &ts[1];
 	};
 
 DeclFonct : DeclFonct DeclUneFonct
@@ -161,7 +165,7 @@ Corps : LACC DeclConst DeclVar {instarg("ALLOC", $3);} SuiteInstr RACC;
 DeclVar : DeclVar TYPE {cur_type = $2;} ListVar PV{	
 		$$ += $4;
 	}
-	| /* rien */ {};
+	| /* rien */ {$$ = 0;};
 
 SuiteInstr : SuiteInstr Instr
 	| /* rien */;
@@ -171,6 +175,9 @@ InstrComp : LACC SuiteInstr RACC;
 Instr : LValue EGAL Exp PV{
 		int type;
 		type = setID(cur_ts, $1);
+		if(CONSTENT == type || CONSTCAR == type){
+			yyerror("Les constantes ne peuvent être modifiées.");
+		} 
 		if(type != $3){
 			yyerror("Type incorrecte.");
 		}
@@ -183,7 +190,10 @@ Instr : LValue EGAL Exp PV{
 	if(ENT != $5){yyerror("Condition avec entier seulement.");}}
 	| RETURN Exp PV
 	| RETURN PV
-	| IDENT LPAR Arguments RPAR PV
+	| IDENT LPAR Arguments RPAR PV{
+		/*Ajoute 1 table des symboles.*/
+		
+	}
 	| READ LPAR IDENT RPAR PV {
 		inst("READ");
 		inst("PUSH");
@@ -196,10 +206,10 @@ Instr : LValue EGAL Exp PV{
 	}
 	| PRINT LPAR Exp RPAR PV{
 		inst("POP");
-		if(ENT == $3){
+		if(ENT == $3 || CONSTENT == $3){
 			inst("WRITE");
 		}
-		else if(CARAC == $3){
+		else if(CARAC == $3 || CONSTCAR == $3){
 			inst("WRITECH");
 		}
 	}
@@ -317,6 +327,7 @@ Exp : Exp ADDSUB Exp {
 			inst("NOTEQ");
 			inst("PUSH");
 		}
+		$$ = ENT;
 	}
 	| ADDSUB Exp{
 		if(ENT != $1){
@@ -366,6 +377,9 @@ Exp : Exp ADDSUB Exp {
 	| LPAR Exp RPAR { /*Rien*/ }
 	| LValue{
 		$$ = getVal(cur_ts, $1);
+		/*Si de type CONST renvoie juste type de base pour les rendre compatibles.*/
+		if(CONSTENT == $$) $$ = ENT;
+		else if(CONSTCAR == $$) $$ = CARAC;
 	}
 	| NUM {
 		instarg("SET", $1);
@@ -404,37 +418,56 @@ void comment(const char *s){
 	printf("#%s\n",s);
 }
 
-int setID(TS *ts, char id[MAX_ID]){
+int setID(TS *ts_locale, char id[MAX_ID]){
 	int i, adr;
+	TS *ts_selec;
 
 	comment("---DEB setID");
-	if(-1 == (i = contains(ts, id))){
-		fprintf(stderr, "Erreur : set ID <%s> inconnu.\n", id);
-		exit(EXIT_FAILURE);
+	if(-1 == (i = contains(ts_locale, id))){
+		if(-1 == (i = contains(&ts[GLOB], id))){
+			fprintf(stderr, "Erreur : set ID <%s> inconnu.\n", id);
+			exit(EXIT_FAILURE);
+		}
+		else{
+			ts_selec = &ts[GLOB];
+		}
 	}
-	adr = ts->table[i].adresse;
+	else{
+		ts_selec = ts_locale;
+	}
+	adr = ts_selec->table[i].adresse;
 	instarg("SET", adr);
 	inst("SWAP");
 	inst("POP");
 	inst("SAVE");
 	comment("---FIN setID");
-	return ts->table[i].type;
+	return ts_selec->table[i].type;
 }
 
-int getVal(TS *ts, char id[MAX_ID]){
+int getVal(TS *ts_locale, char id[MAX_ID]){
 	int i, adr;
+	TS *ts_selec;
 
 	comment("---DEB getVal");
-	if(-1 == (i = contains(ts, id))){
-		fprintf(stderr, "Erreur : get ID <%s> inconnu.\n", id);
-		exit(EXIT_FAILURE);
+	if(-1 == (i = contains(ts_locale, id))){
+		/*Si ne trouve pas en local cherche global.*/
+		if(-1 == ((i = contains(&ts[GLOB], id)))){
+			fprintf(stderr, "Erreur : get ID <%s> inconnu.\n", id);
+			exit(EXIT_FAILURE);
+		}
+		else{
+			ts_selec = &ts[GLOB];
+		}
 	}
-	adr = ts->table[i].adresse;
+	else{
+		ts_selec = ts_locale;
+	}
+	adr = ts_selec->table[i].adresse;
 	instarg("SET", adr);
 	inst("LOAD");
 	inst("PUSH");
 	comment("---FIN getVal");
-	return ts->table[i].type;
+	return ts_selec->table[i].type;
 }
 
 int main(int argc, char** argv) {
@@ -451,9 +484,12 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	init(&ts_main);
+	initTables(&ts);
+	cur_ts = &ts[0];
 	yyparse();
 	endProgram();
+	freeTables(&ts);
+
 	return 0;
 }
 
