@@ -3,25 +3,25 @@
 #include <string.h>
 #include <stdlib.h>
 
-/**
+/*
  * Met l'index de la table des symboles à 0.
  **/
 static void init(TS *ts){
   ts->index = 0;
 }
 
-/**
+/*
  * Réalloue la table des symboles à la taille newlen.
  */
-static void editTable(TS **ts, int newlen){
+static int editTable(TS **ts, int newlen){
   TS *new_ts;
 
   new_ts = (TS*) realloc(*ts, sizeof(TS)*newlen);
   if(!new_ts){
-    fprintf(stderr, "Erreur ajout table.\n");
-    exit(EXIT_FAILURE);
+    return -1;
   }
   *ts = new_ts;
+  return 0;
 }
 
 void initTables(TS **ts){
@@ -42,13 +42,19 @@ void freeTables(TS **ts){
 }
 
 void addTable(TS **ts, int newlen){
-  editTable(ts, newlen);
+  if(-1 == editTable(ts, newlen)){
+    fprintf(stderr, "Erreur ajout table.\n");
+    exit(EXIT_FAILURE);
+  }
   /*Initialise la nouvelle table.*/
   init(*ts+newlen-1);
 }
 
 void removeTable(TS **ts, int newlen){
-  editTable(ts, newlen);
+  if(-1 == editTable(ts, newlen)){
+    fprintf(stderr, "Erreur suppression table.\n");
+    exit(EXIT_FAILURE);
+  }
 }
 
 void insert(TS *ts, int type, int adresse, char id[MAX_ID]){

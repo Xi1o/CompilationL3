@@ -15,12 +15,15 @@
 	int last_free_adr = 0; /*Adresse pile libre disponible.*/
 	TS *ts; /*Tableau de table des symboles.*/
 	TS *cur_ts; /*Pointeur table des symboles actuelle.*/
-	int i_cur_ts = 1; /*Indice table symbole actuelle.*/
+	int taille_ts = 2; /*Taille table symbole actuelle.*/
+	int fst_fonc = 1; /*1 si c'est la 1ère fonction déclarée, 0 sinon*/
+	int decl_fonc = 1;
 	void inst(const char *);
 	void instarg(const char *, int);
 	void comment(const char *);
 	int setID(TS *ts, char id[MAX_ID]);
 	int getVal(TS *ts, char id[MAX_ID]);
+	void callFonction(char id[MAX_ID]);
 %}
 
 %locations
@@ -111,11 +114,9 @@ NombreSigne : NUM {
 		inst("PUSH");
 	};
 
-DeclVarPuisFonct : TYPE ListVar PV DeclVarPuisFonct{
-		instarg("ALLOC", $2);
-	}
-	| DeclFonct 
-	| /* rien */;
+DeclVarPuisFonct : TYPE ListVar {instarg("ALLOC", $2);} PV DeclVarPuisFonct
+	| DeclFonct
+	| /*rien*/;
 
 ListVar : ListVar VRG Ident{
 		$$ = $1 + 1;
@@ -139,18 +140,23 @@ DeclMain : EnTeteMain {instarg("LABEL", 0);} Corps{
 	};
 
 EnTeteMain : MAIN LPAR RPAR{
+		decl_fonc = 0;
 		cur_ts = &ts[1];
 	};
 
 DeclFonct : DeclFonct DeclUneFonct
 	| DeclUneFonct;
 
-DeclUneFonct : EnTeteFonct {instarg("LABEL", jump_label++);} Corps;
+DeclUneFonct : EnTeteFonct {if(1 == fst_fonc){instarg("JUMP", 0);fst_fonc = 0;}instarg("LABEL", jump_label++);} Corps {
+		inst("RETURN");
+	};
 
 EnTeteFonct : TYPE IDENT LPAR Parametres RPAR{
-
+		insert(cur_ts, FONC, jump_label, $2);
 	}
-	| VOID IDENT LPAR Parametres RPAR;
+	| VOID IDENT LPAR Parametres RPAR{
+		insert(cur_ts, FONC, jump_label, $2);
+	};
 
 Parametres : VOID
 	| ListTypVar;
@@ -158,7 +164,14 @@ Parametres : VOID
 ListTypVar : ListTypVar VRG TYPE IDENT
 	| TYPE IDENT;
 
-Corps : LACC DeclConst DeclVar {instarg("ALLOC", $3);} SuiteInstr RACC;
+Corps : LACC DeclConst DeclVar {instarg("ALLOC", $3);} SuiteInstr RACC{
+		if(2 != taille_ts){
+			taille_ts -= 1;
+			cur_ts = &ts[taille_ts - 1];
+			removeTable(&ts, taille_ts);
+		}
+		last_free_adr = 0;
+	};
 
 DeclVar : DeclVar TYPE {cur_type = $2;} ListVar PV{	
 		$$ += $4;
@@ -190,7 +203,7 @@ Instr : LValue EGAL Exp PV{
 	| RETURN PV
 	| IDENT LPAR Arguments RPAR PV{
 		/*Ajoute 1 table des symboles.*/
-		
+		callFonction($1);
 	}
 	| READ LPAR IDENT RPAR PV {
 		inst("READ");
@@ -437,7 +450,14 @@ int setID(TS *ts_locale, char id[MAX_ID]){
 	instarg("SET", adr);
 	inst("SWAP");
 	inst("POP");
-	inst("SAVE");
+	/*Dans le main/globales.*/
+	if(0 == decl_fonc){
+		inst("SAVE");
+	}
+	/*Dans une fonction.*/
+	else{
+		inst("SAVER");
+	}
 	comment("---FIN setID");
 	return ts_selec->table[i].type;
 }
@@ -462,10 +482,33 @@ int getVal(TS *ts_locale, char id[MAX_ID]){
 	}
 	adr = ts_selec->table[i].adresse;
 	instarg("SET", adr);
-	inst("LOAD");
+	/*Dans le main.*/
+	if(0 == decl_fonc){
+		inst("LOAD");
+	}
+	/*Dans une fonction*/
+	else{
+		inst("LOADR");
+	}
 	inst("PUSH");
 	comment("---FIN getVal");
 	return ts_selec->table[i].type;
+}
+
+void callFonction(char id[MAX_ID]){
+	int i, adr;
+
+	comment("---DEB callFonction");
+	if(-1 == (i = contains(&ts[GLOB], id))){
+		fprintf(stderr, "Erreur : fonction id <%s> inconnu.\n", id);
+		exit(EXIT_FAILURE);
+	}
+	adr = ts[GLOB].table[i].adresse;
+	taille_ts += 1;
+	addTable(&ts, taille_ts);
+	cur_ts = &ts[taille_ts - 1];
+	instarg("CALL", adr);
+	comment("---FIN callFonction");
 }
 
 int main(int argc, char** argv) {

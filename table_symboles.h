@@ -7,6 +7,7 @@
 #define CARAC 1 
 #define CONSTENT 2
 #define CONSTCAR 3
+#define FONC 4
 
 typedef struct{
   char id[MAX_ID];
