@@ -10,7 +10,7 @@
 	int yylex();
 	int yylineno;
 	FILE* yyin;
-	int jump_label = 0; /*Valeur premier label.*/
+	int jump_label = 1; /*Valeur premier label.*/
 	int cur_type; /*Type de la variable actuelle.*/
 	int last_free_adr = 0; /*Adresse pile libre disponible.*/
 	TS *ts; /*Tableau de table des symboles.*/
@@ -114,7 +114,7 @@ NombreSigne : NUM {
 DeclVarPuisFonct : TYPE ListVar PV DeclVarPuisFonct{
 		instarg("ALLOC", $2);
 	}
-	| DeclFonct
+	| DeclFonct 
 	| /* rien */;
 
 ListVar : ListVar VRG Ident{
@@ -126,9 +126,7 @@ ListVar : ListVar VRG Ident{
 		last_free_adr += 1;
 	};
 
-Ident : IDENT Tab{
-		insert(cur_ts, cur_type, last_free_adr, $1);
-	};
+Ident : IDENT {insert(cur_ts, cur_type, last_free_adr, $1);} Tab
 
 Tab : Tab LSQB ENTIER RSQB{
 	}
@@ -136,7 +134,7 @@ Tab : Tab LSQB ENTIER RSQB{
 		setSize(cur_ts, 1, cur_ts->index-1);
 	};
 
-DeclMain : EnTeteMain Corps{
+DeclMain : EnTeteMain {instarg("LABEL", 0);} Corps{
 	
 	};
 
@@ -147,7 +145,7 @@ EnTeteMain : MAIN LPAR RPAR{
 DeclFonct : DeclFonct DeclUneFonct
 	| DeclUneFonct;
 
-DeclUneFonct : EnTeteFonct Corps;
+DeclUneFonct : EnTeteFonct {instarg("LABEL", jump_label++);} Corps;
 
 EnTeteFonct : TYPE IDENT LPAR Parametres RPAR{
 
@@ -485,7 +483,7 @@ int main(int argc, char** argv) {
 	}
 
 	initTables(&ts);
-	cur_ts = &ts[0];
+	cur_ts = &ts[GLOB];
 	yyparse();
 	endProgram();
 	freeTables(&ts);

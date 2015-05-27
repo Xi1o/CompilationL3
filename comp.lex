@@ -20,6 +20,7 @@ void lyyerror(YYLTYPE *locp, const char *str){
 "main" {return MAIN;}
 "print" {return PRINT;}
 "const" {return CONST;}
+"void" {return VOID;}
 ";" {return PV;}
 "(" {return LPAR;}
 ")" {return RPAR;}
