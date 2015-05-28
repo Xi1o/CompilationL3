@@ -13,17 +13,22 @@
 	int jump_label = 1; /*Valeur premier label.*/
 	int cur_type; /*Type de la variable actuelle.*/
 	int last_free_adr = 0; /*Adresse pile libre disponible.*/
-	TS *ts; /*Tableau de table des symboles.*/
+	TS ts[2]; /*Tables des symboles global + main.*/
 	TS *cur_ts; /*Pointeur table des symboles actuelle.*/
-	int taille_ts = 2; /*Taille table symbole actuelle.*/
+	TSfonc ts_fonc; /*Table des symboles de fonctions.*/
+	int i_fonc; /*Indice de la fonction actuelle*/
 	int fst_fonc = 1; /*1 si c'est la 1ère fonction déclarée, 0 sinon*/
-	int decl_fonc = 1;
+	int decl_fonc = 1; /*1 si entrain de déclarer des fonctions, 0 sinon*/
+	int args_type[MAX_ARG]; /*Tableau contenant les types des arguments.*/
+	char args_id[MAX_ARG][MAX_ID]; /*Tableau contenant les identifiants des arguments.*/
 	void inst(const char *);
 	void instarg(const char *, int);
 	void comment(const char *);
 	int setID(TS *ts, char id[MAX_ID]);
 	int getVal(TS *ts, char id[MAX_ID]);
+	void setIndexFonction(char id[MAX_ID]);
 	void callFonction(char id[MAX_ID]);
+	void setFonction(int nb_args);
 %}
 
 %locations
@@ -64,8 +69,8 @@
 %token MAIN RETURN VOID
 %type <val> NUM ENTIER
 %type <car> CARACTERE
-%type <val> DeclConst ListConst DeclVar ListVar
-%type <val> Jumpif Jumpelse Wlabel Jumpwhile
+%type <val> DeclConst ListConst DeclVar ListVar ListTypVar Parametres ListExp 
+%type <val> Jumpif Jumpelse Wlabel Jumpwhile EnTeteFonct
 %type <id> LValue
 %type <type> Exp Litteral
 
@@ -147,29 +152,45 @@ EnTeteMain : MAIN LPAR RPAR{
 DeclFonct : DeclFonct DeclUneFonct
 	| DeclUneFonct;
 
-DeclUneFonct : EnTeteFonct {if(1 == fst_fonc){instarg("JUMP", 0);fst_fonc = 0;}instarg("LABEL", jump_label++);} Corps {
+DeclUneFonct : EnTeteFonct {if(1 == fst_fonc){instarg("JUMP", 0);fst_fonc = 0;}instarg("LABEL", jump_label++);last_free_adr = 0;setFonction($1);} Corps {
 		inst("RETURN");
 	};
 
 EnTeteFonct : TYPE IDENT LPAR Parametres RPAR{
-		insert(cur_ts, FONC, jump_label, $2);
+		if(MAX_ARG == $4){
+			yyerror("Max argument dépassé.");
+		}
+		insertFonc(&ts_fonc, FONC, jump_label, $2, $4, args_id, args_type);
+		$$ = $4;
 	}
 	| VOID IDENT LPAR Parametres RPAR{
-		insert(cur_ts, FONC, jump_label, $2);
+		if(MAX_ARG == $4){
+			yyerror("Max argument dépassé.");
+		}
+		
+		insertFonc(&ts_fonc, FONC, jump_label, $2, $4, args_id, args_type);
+		$$ = $4;
 	};
 
-Parametres : VOID
-	| ListTypVar;
+Parametres : VOID{
+		$$ = 0;
+	}
+	| ListTypVar{
+		$$ = $1;
+	};
 
-ListTypVar : ListTypVar VRG TYPE IDENT
-	| TYPE IDENT;
+ListTypVar : ListTypVar VRG TYPE IDENT {
+		args_type[$$] = $3;
+		strncpy(args_id[$$], $4, MAX_ID);
+		$$ += 1;
+	}
+	| TYPE IDENT{
+		args_type[0] = $1;
+		strncpy(args_id[0], $2, MAX_ID);
+		$$ = 1;
+	};
 
 Corps : LACC DeclConst DeclVar {instarg("ALLOC", $3);} SuiteInstr RACC{
-		if(2 != taille_ts){
-			taille_ts -= 1;
-			cur_ts = &ts[taille_ts - 1];
-			removeTable(&ts, taille_ts);
-		}
 		last_free_adr = 0;
 	};
 
@@ -201,8 +222,7 @@ Instr : LValue EGAL Exp PV{
 	if(ENT != $5){yyerror("Condition avec entier seulement.");}}
 	| RETURN Exp PV
 	| RETURN PV
-	| IDENT LPAR Arguments RPAR PV{
-		/*Ajoute 1 table des symboles.*/
+	| IDENT LPAR {setIndexFonction($1);} Arguments RPAR PV{
 		callFonction($1);
 	}
 	| READ LPAR IDENT RPAR PV {
@@ -223,6 +243,7 @@ Instr : LValue EGAL Exp PV{
 		else if(CARAC == $3 || CONSTCAR == $3){
 			inst("WRITECH");
 		}
+		inst("PUSH");
 	}
 	| PV
 	| InstrComp;
@@ -251,8 +272,16 @@ Jumpwhile : {
 		comment("---Fin Jumpwhile");
 	};
 
-Arguments : ListExp
-	| /* rien */;
+Arguments : ListExp{
+		if($1 < ts_fonc.fonc[i_fonc].nb_args){
+			yyerror("Fonction pas assez d'arguments.");
+		}
+	}
+	| /* rien */{
+		if(0 < ts_fonc.fonc[i_fonc].nb_args){
+			yyerror("Fonction pas assez d'arguments.");
+		}
+	};
 
 LValue : IDENT TabExp{
 		strncpy($$, $1, MAX_ID);
@@ -261,8 +290,24 @@ LValue : IDENT TabExp{
 TabExp : TabExp LSQB Exp RSQB
 	| /*rien*/;
 
-ListExp : ListExp VRG Exp
-	| Exp;
+ListExp : ListExp VRG Exp{
+		if($$ > ts_fonc.fonc[i_fonc].nb_args){
+			yyerror("Fonction trop d'arguments.");
+		}
+		if($3 != ts_fonc.fonc[i_fonc].args_type[$$]){
+			yyerror("Fonction argument type incorrecte.");
+		}
+		$$ += 1;
+	}
+	| Exp{
+		if(0 == ts_fonc.fonc[i_fonc].nb_args){
+			yyerror("Fonction trop d'arguments.");
+		}
+		if($1 != ts_fonc.fonc[i_fonc].args_type[0]){
+			yyerror("Fonction argument type incorrecte.");
+		}
+		$$ = 1;
+	};
 
 Exp : Exp ADDSUB Exp {
 		if(ENT != $1 || ENT != $3){
@@ -468,7 +513,6 @@ int getVal(TS *ts_locale, char id[MAX_ID]){
 
 	comment("---DEB getVal");
 	if(-1 == (i = contains(ts_locale, id))){
-		/*Si ne trouve pas en local cherche global.*/
 		if(-1 == ((i = contains(&ts[GLOB], id)))){
 			fprintf(stderr, "Erreur : get ID <%s> inconnu.\n", id);
 			exit(EXIT_FAILURE);
@@ -495,20 +539,41 @@ int getVal(TS *ts_locale, char id[MAX_ID]){
 	return ts_selec->table[i].type;
 }
 
-void callFonction(char id[MAX_ID]){
-	int i, adr;
-
-	comment("---DEB callFonction");
-	if(-1 == (i = contains(&ts[GLOB], id))){
+void setIndexFonction(char id[MAX_ID]){
+	if(-1 == (i_fonc = containsFonc(&ts_fonc, id))){
 		fprintf(stderr, "Erreur : fonction id <%s> inconnu.\n", id);
 		exit(EXIT_FAILURE);
 	}
-	adr = ts[GLOB].table[i].adresse;
-	taille_ts += 1;
-	addTable(&ts, taille_ts);
-	cur_ts = &ts[taille_ts - 1];
+}
+
+void callFonction(char id[MAX_ID]){
+	int adr;
+
+	comment("---DEB callFonction");
+	adr = ts_fonc.fonc[i_fonc].symb.adresse;
 	instarg("CALL", adr);
 	comment("---FIN callFonction");
+}
+
+void setFonction(int nb_args){
+	int i, type;
+	char *id_arg;
+
+	cur_ts = &ts_fonc.fonc[ts_fonc.index-1].ts;
+	instarg("ALLOC", nb_args);
+	for(i = 0; i < nb_args; i++){
+		type = ts_fonc.fonc[ts_fonc.index-1].args_type[i];
+		id_arg = ts_fonc.fonc[ts_fonc.index-1].args_id[i];
+		insert(&ts_fonc.fonc[ts_fonc.index-1].ts, type, last_free_adr, id_arg);
+		last_free_adr += 1;
+		instarg("SET", -2 - nb_args + i);
+		inst("LOADR");
+		inst("PUSH");
+		instarg("SET", i); 
+		inst("SWAP");
+		inst("POP");
+		inst("SAVER");
+	}
 }
 
 int main(int argc, char** argv) {
@@ -525,12 +590,11 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	initTables(&ts);
+	init(&ts[0]);
+	init(&ts[1]);
 	cur_ts = &ts[GLOB];
 	yyparse();
 	endProgram();
-	freeTables(&ts);
 
 	return 0;
 }
-

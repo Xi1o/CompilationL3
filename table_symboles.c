@@ -2,69 +2,24 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 /*
  * Met l'index de la table des symboles à 0.
  **/
-static void init(TS *ts){
+void init(TS *ts){
   ts->index = 0;
-}
-
-/*
- * Réalloue la table des symboles à la taille newlen.
- */
-static int editTable(TS **ts, int newlen){
-  TS *new_ts;
-
-  new_ts = (TS*) realloc(*ts, sizeof(TS)*newlen);
-  if(!new_ts){
-    return -1;
-  }
-  *ts = new_ts;
-  return 0;
-}
-
-void initTables(TS **ts){
-  /*Alloue 2 tables des symboles (globale et main).*/
-  *ts = (TS*) malloc(sizeof(TS)*2);
-  if(!*ts){
-    fprintf(stderr, "Erreur allocations tables.\n");
-    exit(EXIT_FAILURE);
-  }
-  /*Initialise la table des globales.*/
-  init(*ts);
-  /*Initialise la table du main.*/
-  init(*ts+1);
-}
-
-void freeTables(TS **ts){
-  free(*ts);
-}
-
-void addTable(TS **ts, int newlen){
-  if(-1 == editTable(ts, newlen)){
-    fprintf(stderr, "Erreur ajout table.\n");
-    exit(EXIT_FAILURE);
-  }
-  /*Initialise la nouvelle table.*/
-  init(*ts+newlen-1);
-}
-
-void removeTable(TS **ts, int newlen){
-  if(-1 == editTable(ts, newlen)){
-    fprintf(stderr, "Erreur suppression table.\n");
-    exit(EXIT_FAILURE);
-  }
 }
 
 void insert(TS *ts, int type, int adresse, char id[MAX_ID]){
   if(-1 != contains(ts, id)){
-    fprintf(stderr, "Erreur : ID %s déjà existant.\n", id);
+    fprintf(stderr, "Erreur : ID <%s> déjà existant.\n", id);
     exit(EXIT_FAILURE);
   }
 
   ts->table[ts->index].type = type;
   strncpy(ts->table[ts->index].id, id, MAX_ID);
+  ts->table[ts->index].id[MAX_ID-1] = '\0';
   ts->table[ts->index].type = type;
   ts->table[ts->index].adresse = adresse;
   ts->index++;
@@ -79,6 +34,41 @@ int contains(TS *ts, char id[MAX_ID]){
 
   for(i = 0; i < ts->index; i++){
     if(0 == strncmp(id, ts->table[i].id, MAX_ID)){
+      return i;
+    }
+  } 
+  return -1;
+}
+
+void insertFonc(TSfonc *ts, int type, int adresse, char id[MAX_ID], int nb_args, char args_id[MAX_ARG][MAX_ID], int args_type[MAX_ARG]){
+  int i;
+  if(-1 != containsFonc(ts, id)){
+    fprintf(stderr, "Erreur : ID %s déjà existant.\n", id);
+    exit(EXIT_FAILURE);
+  }
+
+  ts->fonc[ts->index].symb.type = type;
+  strncpy(ts->fonc[ts->index].symb.id, id, MAX_ID);
+  ts->fonc[ts->index].symb.id[MAX_ID-1] = '\0';
+  ts->fonc[ts->index].symb.adresse = adresse;
+  ts->fonc[ts->index].symb.taille = 1;
+  
+  ts->fonc[ts->index].nb_args = nb_args;
+  for(i = 0 ; i < nb_args; i++){
+    strncpy(ts->fonc[ts->index].args_id[i], args_id[i], MAX_ID);
+    ts->fonc[ts->index].args_id[i][MAX_ID-1] = '\0';
+    ts->fonc[ts->index].args_type[i] = args_type[i];
+    ts->fonc[ts->index].args_adr[i] = i;
+  }
+  
+  ts->index++;
+}
+
+int containsFonc(TSfonc *ts, char id[MAX_ID]){
+  int i;
+
+  for(i = 0; i < ts->index; i++){
+    if(0 == strncmp(id, ts->fonc[i].symb.id, MAX_ID)){
       return i;
     }
   } 
