@@ -21,6 +21,7 @@ void lyyerror(YYLTYPE *locp, const char *str){
 "print" {return PRINT;}
 "const" {return CONST;}
 "void" {return VOID;}
+"return" {return RETURN;}
 ";" {return PV;}
 "(" {return LPAR;}
 ")" {return RPAR;}
@@ -33,8 +34,8 @@ void lyyerror(YYLTYPE *locp, const char *str){
 "if" {return IF;}
 "else" {return ELSE;}
 "while" {return WHILE;}
-"entier" {yylval.type = 0; return TYPE;}
-"caractere" {yylval.type = 1; return TYPE;}
+"entier" {yylval.type = 3; return TYPE;}
+"caractere" {yylval.type = 4; return TYPE;}
 [a-zA-Z][a-zA-Z0-9_]* {sscanf(yytext, "%32s", yylval.id); return IDENT;}
 "=" {return EGAL;}
 "," {return VRG;}

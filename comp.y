@@ -16,11 +16,12 @@
 	TS ts[2]; /*Tables des symboles global + main.*/
 	TS *cur_ts; /*Pointeur table des symboles actuelle.*/
 	TSfonc ts_fonc; /*Table des symboles de fonctions.*/
-	int i_fonc; /*Indice de la fonction actuelle*/
+	int cur_fonc; /*Indice de la fonction actuelle*/
 	int fst_fonc = 1; /*1 si c'est la 1ère fonction déclarée, 0 sinon*/
 	int decl_fonc = 1; /*1 si entrain de déclarer des fonctions, 0 sinon*/
 	int args_type[MAX_ARG]; /*Tableau contenant les types des arguments.*/
 	char args_id[MAX_ARG][MAX_ID]; /*Tableau contenant les identifiants des arguments.*/
+	int has_returned; /*0 si une fonction de type non void n'a pas return, 1 sinon.*/
 	void inst(const char *);
 	void instarg(const char *, int);
 	void comment(const char *);
@@ -70,10 +71,9 @@
 %type <val> NUM ENTIER
 %type <car> CARACTERE
 %type <val> DeclConst ListConst DeclVar ListVar ListTypVar Parametres ListExp 
-%type <val> Jumpif Jumpelse Wlabel Jumpwhile EnTeteFonct
+%type <val> Jumpif Jumpelse Wlabel Jumpwhile EnTeteFonct Type
 %type <id> LValue
 %type <type> Exp Litteral
-
 
 %%
 Prog : DeclConst DeclVarPuisFonct DeclMain;
@@ -119,7 +119,7 @@ NombreSigne : NUM {
 		inst("PUSH");
 	};
 
-DeclVarPuisFonct : TYPE ListVar {instarg("ALLOC", $2);} PV DeclVarPuisFonct
+DeclVarPuisFonct : Type ListVar {instarg("ALLOC", $2);} PV DeclVarPuisFonct
 	| DeclFonct
 	| /*rien*/;
 
@@ -152,24 +152,28 @@ EnTeteMain : MAIN LPAR RPAR{
 DeclFonct : DeclFonct DeclUneFonct
 	| DeclUneFonct;
 
-DeclUneFonct : EnTeteFonct {if(1 == fst_fonc){instarg("JUMP", 0);fst_fonc = 0;}instarg("LABEL", jump_label++);last_free_adr = 0;setFonction($1);} Corps {
+DeclUneFonct : EnTeteFonct {if(1 == fst_fonc){instarg("JUMP", 0);fst_fonc = 0;}comment("---DeclUneFonct");instarg("LABEL", jump_label++);last_free_adr = 0;setFonction($1);} Corps {
+		if(0 == has_returned) yyerror("Retour manquant.");
 		inst("RETURN");
 	};
 
-EnTeteFonct : TYPE IDENT LPAR Parametres RPAR{
+EnTeteFonct : Type IDENT LPAR Parametres RPAR{
 		if(MAX_ARG == $4){
 			yyerror("Max argument dépassé.");
 		}
-		insertFonc(&ts_fonc, FONC, jump_label, $2, $4, args_id, args_type);
+		insertFonc(&ts_fonc, $1, jump_label, $2, $4, args_id, args_type);
 		$$ = $4;
+		has_returned = 0;
 	}
 	| VOID IDENT LPAR Parametres RPAR{
 		if(MAX_ARG == $4){
 			yyerror("Max argument dépassé.");
 		}
 		
-		insertFonc(&ts_fonc, FONC, jump_label, $2, $4, args_id, args_type);
+		insertFonc(&ts_fonc, VOID_, jump_label, $2, $4, args_id, args_type);
 		$$ = $4;
+		/*La fonction peut se passer du return.*/
+		has_returned = 1;
 	};
 
 Parametres : VOID{
@@ -179,23 +183,23 @@ Parametres : VOID{
 		$$ = $1;
 	};
 
-ListTypVar : ListTypVar VRG TYPE IDENT {
+ListTypVar : ListTypVar VRG Type IDENT {
 		args_type[$$] = $3;
 		strncpy(args_id[$$], $4, MAX_ID);
 		$$ += 1;
 	}
-	| TYPE IDENT{
+	| Type IDENT {
 		args_type[0] = $1;
 		strncpy(args_id[0], $2, MAX_ID);
 		$$ = 1;
 	};
 
-Corps : LACC DeclConst DeclVar {instarg("ALLOC", $3);} SuiteInstr RACC{
+Corps : LACC DeclConst DeclVar {instarg("ALLOC", $3);} SuiteInstr RACC {
 		last_free_adr = 0;
 	};
 
-DeclVar : DeclVar TYPE {cur_type = $2;} ListVar PV{	
-		$$ += $4;
+DeclVar : DeclVar Type ListVar PV {	
+		$$ += $3;
 	}
 	| /* rien */ {$$ = 0;};
 
@@ -204,7 +208,9 @@ SuiteInstr : SuiteInstr Instr
 
 InstrComp : LACC SuiteInstr RACC;
 
-Instr : LValue EGAL Exp PV{
+Type : TYPE {cur_type = $1; $$=$1;};
+
+Instr : LValue EGAL Exp PV {
 		int type;
 		type = setID(cur_ts, $1);
 		if(CONSTENT == type || CONSTCAR == type){
@@ -220,27 +226,44 @@ Instr : LValue EGAL Exp PV{
 	if(ENT != $3){yyerror("Condition avec entier seulement.");}}
 	| WHILE Wlabel {instarg("LABEL", $2);} LPAR Exp RPAR Jumpwhile Instr {instarg("JUMP", $2); instarg("LABEL", $7);
 	if(ENT != $5){yyerror("Condition avec entier seulement.");}}
-	| RETURN Exp PV
-	| RETURN PV
-	| IDENT LPAR {setIndexFonction($1);} Arguments RPAR PV{
+	| RETURN Exp PV {
+		comment("---RETURN Exp");
+		if($2 != ts_fonc.fonc[cur_fonc].symb.type){
+			yyerror("Retour fonction, type incorrecte.");
+		}
+		has_returned = 1;
+		inst("POP");
+		inst("RETURN");
+	}
+	| RETURN PV {
+		comment("---RETURN");
+		if(VOID_ != ts_fonc.fonc[cur_fonc].symb.type){
+			yyerror("Valeur de retour manquante.");
+		}
+		inst("RETURN");
+	}
+	| IDENT LPAR {setIndexFonction($1);} Arguments RPAR PV {
 		callFonction($1);
 	}
 	| READ LPAR IDENT RPAR PV {
+		comment("---READ");
 		inst("READ");
 		inst("PUSH");
 		setID(cur_ts, $3);
 	}
 	| READCH LPAR IDENT RPAR PV {
+		comment("---READCH");
 		inst("READCH");
 		inst("PUSH");
 		setID(cur_ts, $3);
 	}
 	| PRINT LPAR Exp RPAR PV{
+		comment("---PRINT");
 		inst("POP");
-		if(ENT == $3 || CONSTENT == $3){
+		if(ENT == $3){
 			inst("WRITE");
 		}
-		else if(CARAC == $3 || CONSTCAR == $3){
+		else if(CARAC == $3){
 			inst("WRITECH");
 		}
 		inst("PUSH");
@@ -249,16 +272,14 @@ Instr : LValue EGAL Exp PV{
 	| InstrComp;
 
 Jumpif : {
-		comment("---Deb Jumpif");
+		comment("---Jumpif");
 		inst("POP");
 		instarg("JUMPF", $$ = jump_label++);
-		comment("---Fin Jumpif");
 	};
 
 Jumpelse : {
-		comment("---Deb Jumpelse");
+		comment("---Jumpelse");
 		instarg("JUMP", $$ = jump_label++);
-		comment("---Fin Jumpelse");
 	};
 
 Wlabel : {
@@ -266,19 +287,18 @@ Wlabel : {
 	};
 
 Jumpwhile : {
-		comment("---Deb Jumpwhile");
+		comment("---Jumpwhile");
 		inst("POP");
 		instarg("JUMPF", $$ = jump_label++);
-		comment("---Fin Jumpwhile");
 	};
 
 Arguments : ListExp{
-		if($1 < ts_fonc.fonc[i_fonc].nb_args){
+		if($1 < ts_fonc.fonc[cur_fonc].nb_args){
 			yyerror("Fonction pas assez d'arguments.");
 		}
 	}
 	| /* rien */{
-		if(0 < ts_fonc.fonc[i_fonc].nb_args){
+		if(0 < ts_fonc.fonc[cur_fonc].nb_args){
 			yyerror("Fonction pas assez d'arguments.");
 		}
 	};
@@ -291,25 +311,26 @@ TabExp : TabExp LSQB Exp RSQB
 	| /*rien*/;
 
 ListExp : ListExp VRG Exp{
-		if($$ > ts_fonc.fonc[i_fonc].nb_args){
+		if($$ > ts_fonc.fonc[cur_fonc].nb_args){
 			yyerror("Fonction trop d'arguments.");
 		}
-		if($3 != ts_fonc.fonc[i_fonc].args_type[$$]){
+		if($3 != ts_fonc.fonc[cur_fonc].args_type[$$]){
 			yyerror("Fonction argument type incorrecte.");
 		}
 		$$ += 1;
 	}
 	| Exp{
-		if(0 == ts_fonc.fonc[i_fonc].nb_args){
+		if(0 == ts_fonc.fonc[cur_fonc].nb_args){
 			yyerror("Fonction trop d'arguments.");
 		}
-		if($1 != ts_fonc.fonc[i_fonc].args_type[0]){
+		if($1 != ts_fonc.fonc[cur_fonc].args_type[0]){
 			yyerror("Fonction argument type incorrecte.");
 		}
 		$$ = 1;
 	};
 
 Exp : Exp ADDSUB Exp {
+		comment("---ADDSUB");
 		if(ENT != $1 || ENT != $3){
 			yyerror("Addition / soustraction avec entiers seulement.");
 		}
@@ -325,6 +346,7 @@ Exp : Exp ADDSUB Exp {
 		inst("PUSH");
 	}
 	| Exp DIVSTAR Exp {
+		comment("---DIVSTAR");
 		if(ENT != $1 || ENT != $3){
 			yyerror("Multiplication / division avec entiers seulement.");
 		}
@@ -340,7 +362,7 @@ Exp : Exp ADDSUB Exp {
 		inst("PUSH");
 	}
 	| Exp COMP Exp{
-		comment("---Comparaison");
+		comment("---COMP");
 		if(0 == strcmp($2, "<")){
 			inst("POP"); 
 			inst("SWAP"); 
@@ -386,6 +408,7 @@ Exp : Exp ADDSUB Exp {
 		$$ = ENT;
 	}
 	| ADDSUB Exp{
+		comment("---ADDSUB unaire");
 		if(ENT != $1){
 			yyerror("+/- avec entiers seulement.");
 		}
@@ -396,6 +419,7 @@ Exp : Exp ADDSUB Exp {
 		}
 	}
 	| Exp BOPE Exp{
+		comment("---BOPE");
 		if(ENT != $1 || ENT != $3){
 			yyerror("Booléens avec entiers seulement.");
 		}
@@ -421,6 +445,7 @@ Exp : Exp ADDSUB Exp {
 		}
 	}
 	| NEGATION Exp {
+		comment("---NEGATION");
 		if(ENT != $2){
 			yyerror("Négation avec entier seulement.");
 		}
@@ -430,7 +455,7 @@ Exp : Exp ADDSUB Exp {
 		inst("SUB");
 		inst("PUSH");
 	}
-	| LPAR Exp RPAR { /*Rien*/ }
+	| LPAR Exp RPAR { $$ = $2; }
 	| LValue{
 		$$ = getVal(cur_ts, $1);
 		/*Si de type CONST renvoie juste type de base pour les rendre compatibles.*/
@@ -438,17 +463,21 @@ Exp : Exp ADDSUB Exp {
 		else if(CONSTCAR == $$) $$ = CARAC;
 	}
 	| NUM {
+		comment("---NUM");
 		instarg("SET", $1);
 		inst("PUSH");
-		$$ = 0;
+		$$ = ENT;
 	}
 	| CARACTERE {
+		comment("---CARACTERE");
 		instarg("SET", $1);
 		inst("PUSH");
-		$$ = 1;
+		$$ = CARAC;
 	}
-	| IDENT LPAR Arguments RPAR{
-
+	| IDENT LPAR {setIndexFonction($1);} Arguments RPAR{
+		$$ = 3;
+		callFonction($1);
+		inst("PUSH");
 	};
 
 %%
@@ -475,10 +504,10 @@ void comment(const char *s){
 }
 
 int setID(TS *ts_locale, char id[MAX_ID]){
-	int i, adr;
+	int i, adr, in_glob;
 	TS *ts_selec;
 
-	comment("---DEB setID");
+	comment("---setID");
 	if(-1 == (i = contains(ts_locale, id))){
 		if(-1 == (i = contains(&ts[GLOB], id))){
 			fprintf(stderr, "Erreur : set ID <%s> inconnu.\n", id);
@@ -486,32 +515,33 @@ int setID(TS *ts_locale, char id[MAX_ID]){
 		}
 		else{
 			ts_selec = &ts[GLOB];
+			in_glob = 1;
 		}
 	}
 	else{
 		ts_selec = ts_locale;
+		in_glob = 0;
 	}
 	adr = ts_selec->table[i].adresse;
 	instarg("SET", adr);
 	inst("SWAP");
 	inst("POP");
 	/*Dans le main/globales.*/
-	if(0 == decl_fonc){
+	if(0 == decl_fonc || 1 == in_glob){
 		inst("SAVE");
 	}
 	/*Dans une fonction.*/
 	else{
 		inst("SAVER");
 	}
-	comment("---FIN setID");
 	return ts_selec->table[i].type;
 }
 
 int getVal(TS *ts_locale, char id[MAX_ID]){
-	int i, adr;
+	int i, adr, in_glob;
 	TS *ts_selec;
 
-	comment("---DEB getVal");
+	comment("---getVal");
 	if(-1 == (i = contains(ts_locale, id))){
 		if(-1 == ((i = contains(&ts[GLOB], id)))){
 			fprintf(stderr, "Erreur : get ID <%s> inconnu.\n", id);
@@ -519,15 +549,17 @@ int getVal(TS *ts_locale, char id[MAX_ID]){
 		}
 		else{
 			ts_selec = &ts[GLOB];
+			in_glob = 1;
 		}
 	}
 	else{
 		ts_selec = ts_locale;
+		in_glob = 0;
 	}
 	adr = ts_selec->table[i].adresse;
 	instarg("SET", adr);
 	/*Dans le main.*/
-	if(0 == decl_fonc){
+	if(0 == decl_fonc || 1 == in_glob){
 		inst("LOAD");
 	}
 	/*Dans une fonction*/
@@ -535,12 +567,11 @@ int getVal(TS *ts_locale, char id[MAX_ID]){
 		inst("LOADR");
 	}
 	inst("PUSH");
-	comment("---FIN getVal");
 	return ts_selec->table[i].type;
 }
 
 void setIndexFonction(char id[MAX_ID]){
-	if(-1 == (i_fonc = containsFonc(&ts_fonc, id))){
+	if(-1 == (cur_fonc = containsFonc(&ts_fonc, id))){
 		fprintf(stderr, "Erreur : fonction id <%s> inconnu.\n", id);
 		exit(EXIT_FAILURE);
 	}
@@ -549,16 +580,16 @@ void setIndexFonction(char id[MAX_ID]){
 void callFonction(char id[MAX_ID]){
 	int adr;
 
-	comment("---DEB callFonction");
-	adr = ts_fonc.fonc[i_fonc].symb.adresse;
+	comment("---callFonction");
+	adr = ts_fonc.fonc[cur_fonc].symb.adresse;
 	instarg("CALL", adr);
-	comment("---FIN callFonction");
 }
 
 void setFonction(int nb_args){
 	int i, type;
 	char *id_arg;
 
+	comment("---setFonction");
 	cur_ts = &ts_fonc.fonc[ts_fonc.index-1].ts;
 	instarg("ALLOC", nb_args);
 	for(i = 0; i < nb_args; i++){
