@@ -11,6 +11,8 @@
 	int yylineno;
 	FILE* yyin;
 	int jump_label = 1; /*Valeur premier label.*/
+	int var_size;
+	int is_tab;
 	int cur_type; /*Type de la variable actuelle.*/
 	int last_free_adr = 0; /*Adresse pile libre disponible.*/
 	TS ts[2]; /*Tables des symboles global + main.*/
@@ -132,12 +134,16 @@ ListVar : ListVar VRG Ident{
 		last_free_adr += 1;
 	};
 
-Ident : IDENT {insert(cur_ts, cur_type, last_free_adr, $1);} Tab
+Ident : IDENT {insert(cur_ts, cur_type, last_free_adr, $1);var_size = 1;is_tab = 0;} Tab
 
-Tab : Tab LSQB ENTIER RSQB{
+Tab : Tab LSQB NUM RSQB{
+		var_size = $3;
+		is_tab = 1;
+		instarg("ALLOC", var_size-1);
+		last_free_adr += var_size-1;
 	}
 	| /*rien*/ {
-		setSize(cur_ts, 1, cur_ts->index-1);
+		setSize(cur_ts, var_size, cur_ts->index-1, is_tab);
 	};
 
 DeclMain : EnTeteMain {instarg("LABEL", 0);} Corps{
@@ -303,11 +309,11 @@ Arguments : ListExp{
 		}
 	};
 
-LValue : IDENT TabExp{
+LValue : IDENT {is_tab = 0;} TabExp {
 		strncpy($$, $1, MAX_ID);
 	};
 
-TabExp : TabExp LSQB Exp RSQB
+TabExp : TabExp LSQB Exp RSQB {is_tab = 1;}
 	| /*rien*/;
 
 ListExp : ListExp VRG Exp{
@@ -455,11 +461,11 @@ Exp : Exp ADDSUB Exp {
 		inst("SUB");
 		inst("PUSH");
 	}
-	| LPAR Exp RPAR { $$ = $2; }
-	| LValue{
+	| LPAR Exp RPAR {$$ = $2;}
+	| LValue {
 		$$ = getVal(cur_ts, $1);
 		/*Si de type CONST renvoie juste type de base pour les rendre compatibles.*/
-		if(CONSTENT == $$) $$ = ENT;
+		if(CONSTENT  == $$) $$ = ENT;
 		else if(CONSTCAR == $$) $$ = CARAC;
 	}
 	| NUM {
@@ -523,9 +529,21 @@ int setID(TS *ts_locale, char id[MAX_ID]){
 		in_glob = 0;
 	}
 	adr = ts_selec->table[i].adresse;
-	instarg("SET", adr);
-	inst("SWAP");
-	inst("POP");
+	if(!is_tab){
+		instarg("SET", adr);
+	}
+	else{
+		inst("POP");  /*reg1 -> val*/
+		inst("SWAP"); /*reg2 -> val*/
+		inst("POP"); /*reg1 -> i*/
+		inst("SWAP"); /*reg1 -> val / reg2 -> i*/
+		inst("PUSH");
+		instarg("SET", adr); /*reg1 -> adr*/
+		inst("ADD"); /*reg1 -> adr + i*/
+	}
+		inst("SWAP");
+		inst("POP");
+	
 	/*Dans le main/globales.*/
 	if(0 == decl_fonc || 1 == in_glob){
 		inst("SAVE");
@@ -558,6 +576,11 @@ int getVal(TS *ts_locale, char id[MAX_ID]){
 	}
 	adr = ts_selec->table[i].adresse;
 	instarg("SET", adr);
+	if(is_tab){
+		inst("SWAP");
+		inst("POP");
+		inst("ADD");
+	}
 	/*Dans le main.*/
 	if(0 == decl_fonc || 1 == in_glob){
 		inst("LOAD");

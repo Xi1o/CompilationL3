@@ -15,6 +15,7 @@ typedef struct{
   int type;
   int taille;
   int adresse;
+  int tab; /*0 ou 1 si est un tableau*/
 }Symbole;
 
 typedef struct{
@@ -40,7 +41,7 @@ void init(TS *ts);
 
 void insert(TS *ts, int type, int adresse, char id[MAX_ID]);
 
-void setSize(TS *ts, int taille, int index);
+void setSize(TS *ts, int taille, int index, int is_tab);
 
 int contains(TS *ts, char id[MAX_ID]);
 
