@@ -73,7 +73,7 @@
 %type <val> NUM ENTIER
 %type <car> CARACTERE
 %type <val> DeclConst ListConst DeclVar ListVar ListTypVar Parametres ListExp 
-%type <val> Jumpif Jumpelse Wlabel Jumpwhile EnTeteFonct Type
+%type <val> Jumpif Jumpelse Wlabel Jumpwhile EnTeteFonct Type Tab Ident
 %type <id> LValue
 %type <type> Exp Litteral
 
@@ -126,24 +126,25 @@ DeclVarPuisFonct : Type ListVar {instarg("ALLOC", $2);} PV DeclVarPuisFonct
 	| /*rien*/;
 
 ListVar : ListVar VRG Ident{
-		$$ = $1 + 1;
-		last_free_adr += 1;
+		$$ += $3;
 	}
 	| Ident{
-		$$ = 1;
-		last_free_adr += 1;
+		$$ = $1;
 	};
 
-Ident : IDENT {insert(cur_ts, cur_type, last_free_adr, $1);var_size = 1;is_tab = 0;} Tab
+Ident : IDENT {insert(cur_ts, cur_type, last_free_adr, $1);is_tab = 0;} Tab {
+		$$ = $3;
+		last_free_adr += $$;	
+	};
 
 Tab : Tab LSQB NUM RSQB{
 		var_size = $3;
 		is_tab = 1;
-		instarg("ALLOC", var_size-1);
-		last_free_adr += var_size-1;
+		$$ *= $3;
 	}
-	| /*rien*/ {
-		setSize(cur_ts, var_size, cur_ts->index-1, is_tab);
+	| /*rien*/ {	
+		setSize(cur_ts, 1, cur_ts->index-1, is_tab);
+		$$ = 1;
 	};
 
 DeclMain : EnTeteMain {instarg("LABEL", 0);} Corps{
