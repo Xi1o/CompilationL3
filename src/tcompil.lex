@@ -1,11 +1,23 @@
 %{
-#include "comp.h"
-int jump_lab = 0;
+
+/* PROJET COMPILATION L3 Informatique
+	Auteurs :
+		Raphaël CHENEAU <rcheneau@etud.u-pem.fr>
+		Bryan LEE <blee@etud.u-pem.fr>
+*/
+
+
+
+#include "tcompil.h"
+
+void lyyerror(YYLTYPE *locp, const char *str){
+	fprintf(stderr, "Erreur\n");
+	exit(EXIT_FAILURE);
+}
 %}
 
 %%
 [ \t\n]+ ;
-"/*".*?"*/" ;
 
 [0-9]+ {sscanf(yytext, "%d", &yylval.val); return NUM;}
 "'"."'" {yylval.car = yytext[1]; return CARACTERE;}
@@ -16,6 +28,9 @@ int jump_lab = 0;
 "!" {return NEGATION;}
 "main" {return MAIN;}
 "print" {return PRINT;}
+"const" {return CONST;}
+"void" {return VOID;}
+"return" {return RETURN;}
 ";" {return PV;}
 "(" {return LPAR;}
 ")" {return RPAR;}
@@ -23,14 +38,13 @@ int jump_lab = 0;
 "}" {return RACC;}
 "[" {return LSQB;}
 "]" {return RSQB;}
-"print" {return PRINT;}
 "read" {return READ;}
 "readch" {return READCH;}
 "if" {return IF;}
 "else" {return ELSE;}
 "while" {return WHILE;}
-"entier" {yylval.type = 0; return TYPE;}
-"caractere" {yylval.type = 1; return TYPE;}
+"entier" {yylval.type = 3; return TYPE;}
+"caractere" {yylval.type = 4; return TYPE;}
 [a-zA-Z][a-zA-Z0-9_]* {sscanf(yytext, "%32s", yylval.id); return IDENT;}
 "=" {return EGAL;}
 "," {return VRG;}

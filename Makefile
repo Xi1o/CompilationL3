@@ -1,22 +1,26 @@
 CC = gcc
-CFLAGS = -Wall
-LDFLAGS = -Wall -lfl
-EXEC = comp
+DBG = yes
+ifeq ($(DBG), yes)
+	CFLAGS = -g -Wall -I$(SDIR)
+endif
+LDFLAGS = -lfl
+EXEC = tcompil
+SDIR = ./src/
 
 all: $(EXEC) clean
 
 $(EXEC): $(EXEC).o lex.yy.o table_symboles.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 
-$(EXEC).c: $(EXEC).y
-	bison -d -o $(EXEC).c $(EXEC).y
+$(EXEC).c: $(SDIR)$(EXEC).y
+	bison -d -o $(EXEC).c $(SDIR)$(EXEC).y
 
 $(EXEC).h: $(EXEC).c
 
-lex.yy.c: $(EXEC).lex $(EXEC).h
-	flex $(EXEC).lex
+lex.yy.c: $(SDIR)$(EXEC).lex $(EXEC).h
+	flex $(SDIR)$(EXEC).lex
 
-table_symboles.o: table_symboles.c table_symboles.h
+table_symboles.o: $(SDIR)table_symboles.c $(SDIR)table_symboles.h
 	$(CC) -o $@ -c $< $(CFLAGS)
 
 %.o: %.c
