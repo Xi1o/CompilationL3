@@ -32,6 +32,7 @@
 	void setIndexFonction(char id[MAX_ID]);
 	void callFonction(char id[MAX_ID]);
 	void setFonction(int nb_args);
+	int getDimSize(int *dimensions, int from, int n);
 %}
 
 %locations
@@ -134,16 +135,18 @@ ListVar : ListVar VRG Ident{
 
 Ident : IDENT {insert(cur_ts, cur_type, last_free_adr, $1);is_tab = 0;} Tab {
 		$$ = $3;
-		last_free_adr += $$;	
+		last_free_adr += $$;
+		setDimension(cur_ts, is_tab, cur_ts->index-1);
 	};
 
 Tab : Tab LSQB NUM RSQB{
+		setSizeDimension(cur_ts, $3, is_tab, cur_ts->index-1);
 		var_size = $3;
-		is_tab = 1;
+		is_tab += 1;
 		$$ *= $3;
 	}
 	| /*rien*/ {	
-		setSize(cur_ts, 1, cur_ts->index-1, is_tab);
+		setSize(cur_ts, 1, cur_ts->index-1);
 		$$ = 1;
 	};
 
@@ -510,8 +513,17 @@ void comment(const char *s){
 	printf("#%s\n",s);
 }
 
+int getDimSize(int *dimensions, int from, int n){
+	int i, res;
+	
+	for(i = from, res = 1; i < n; i++){
+		res *= dimensions[i];
+	}
+	return res;
+}
+
 int setID(TS *ts_locale, char id[MAX_ID]){
-	int i, adr, in_glob;
+	int i, j, adr, in_glob, n;
 	TS *ts_selec;
 
 	comment("---setID");
@@ -534,16 +546,34 @@ int setID(TS *ts_locale, char id[MAX_ID]){
 		instarg("SET", adr);
 	}
 	else{
-		inst("POP");  /*reg1 -> val*/
-		inst("SWAP"); /*reg2 -> val*/
-		inst("POP"); /*reg1 -> i*/
-		inst("SWAP"); /*reg1 -> val / reg2 -> i*/
-		inst("PUSH");
-		instarg("SET", adr); /*reg1 -> adr*/
-		inst("ADD"); /*reg1 -> adr + i*/
-	}
+		n = ts_selec->table[i].tab;
+		for(j = 0; j < n-1; j++){
+			instarg("SET", n+1);
+			inst("SWAP");
+			inst("TOPST");
+			inst("SUB");
+			inst("LOAD");
+			inst("SWAP");
+			instarg("SET", getDimSize(ts_selec->table[i].dimensions, j+1, n));
+			inst("MUL");
+			inst("PUSH");		
+		}
+		instarg("SET", 2*(n+1)-(n+1));
 		inst("SWAP");
-		inst("POP");
+		inst("TOPST");
+		inst("SUB");
+		inst("LOAD");
+		inst("SWAP");
+		for(j = 0; j < n-1; j++){
+			inst("POP");
+			inst("ADD");
+			inst("SWAP");
+		}
+		instarg("SET", adr);
+		inst("ADD");
+	}
+	inst("SWAP");
+	inst("POP");
 	
 	/*Dans le main/globales.*/
 	if(0 == decl_fonc || 1 == in_glob){
@@ -557,7 +587,7 @@ int setID(TS *ts_locale, char id[MAX_ID]){
 }
 
 int getVal(TS *ts_locale, char id[MAX_ID]){
-	int i, adr, in_glob;
+	int i, j, n, adr, in_glob;
 	TS *ts_selec;
 
 	comment("---getVal");
@@ -578,8 +608,30 @@ int getVal(TS *ts_locale, char id[MAX_ID]){
 	adr = ts_selec->table[i].adresse;
 	instarg("SET", adr);
 	if(is_tab){
+		n = ts_selec->table[i].tab;
+		for(j = 0; j < n-1; j++){
+			instarg("SET", n);
+			inst("SWAP");
+			inst("TOPST");
+			inst("SUB");
+			inst("LOAD");
+			inst("SWAP");
+			instarg("SET", getDimSize(ts_selec->table[i].dimensions, j+1, n));
+			inst("MUL");
+			inst("PUSH");		
+		}
+		instarg("SET", 2*(n+1)-(n+2));
 		inst("SWAP");
-		inst("POP");
+		inst("TOPST");
+		inst("SUB");
+		inst("LOAD");
+		inst("SWAP");
+		for(j = 0; j < n-1; j++){
+			inst("POP");
+			inst("ADD");
+			inst("SWAP");
+		}
+		instarg("SET", adr);
 		inst("ADD");
 	}
 	/*Dans le main.*/

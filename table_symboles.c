@@ -25,9 +25,16 @@ void insert(TS *ts, int type, int adresse, char id[MAX_ID]){
   ts->index++;
 }
 
-void setSize(TS *ts, int taille, int index, int is_tab){
+void setSizeDimension(TS *ts, int size, int i, int index){
+  ts->table[index].dimensions[i] = size;
+}
+
+void setDimension(TS *ts, int nb, int index){
+  ts->table[index].tab = nb;
+}
+
+void setSize(TS *ts, int taille, int index){
   ts->table[index].taille = taille;
-  ts->table[index].tab = is_tab;
 }
 
 int contains(TS *ts, char id[MAX_ID]){
