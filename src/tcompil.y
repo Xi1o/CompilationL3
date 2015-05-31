@@ -40,6 +40,7 @@
 	int tab; /*sauvegarde si is_tab a été mis à 1.*/
 	int cur_type; /*Type de la variable actuelle.*/
 	int last_free_adr = 0; /*Adresse pile libre disponible.*/
+	int last_free_adr_tmp; /*Sauvegarde last_free_adr avant decl fonction, restaure après.*/
 	int cur_fonc; /*Indice de la fonction actuelle*/
 	int fst_fonc = 1; /*1 si c'est la 1ère fonction déclarée, 0 sinon*/
 	int decl_fonc = 1; /*1 si entrain de déclarer des fonctions, 0 sinon*/
@@ -168,9 +169,7 @@ Tab : Tab LSQB NUM RSQB{
 		$$ = 1;
 	};
 
-DeclMain : EnTeteMain {instarg("LABEL", 0);} Corps{
-	
-	};
+DeclMain : EnTeteMain {instarg("LABEL", 0);if(0==fst_fonc){last_free_adr = last_free_adr_tmp;}} Corps;
 
 EnTeteMain : MAIN LPAR RPAR{
 		decl_fonc = 0;
@@ -180,7 +179,7 @@ EnTeteMain : MAIN LPAR RPAR{
 DeclFonct : DeclFonct DeclUneFonct
 	| DeclUneFonct;
 
-DeclUneFonct : EnTeteFonct {if(1 == fst_fonc){instarg("JUMP", 0);fst_fonc = 0;}comment("---DeclUneFonct");instarg("LABEL", jump_label++);last_free_adr = 0;setFonction($1);} Corps {
+DeclUneFonct : EnTeteFonct {if(1 == fst_fonc){instarg("JUMP", 0);fst_fonc = 0;last_free_adr_tmp = last_free_adr;}comment("---DeclUneFonct");instarg("LABEL", jump_label++);last_free_adr = 0;setFonction($1);} Corps {
 		if(0 == has_returned) yyerror("Retour manquant.");
 		inst("RETURN");
 	};
