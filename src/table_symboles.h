@@ -1,3 +1,9 @@
+/* PROJET COMPILATION L3 Informatique
+	Auteurs :
+		Raphaël CHENEAU <rcheneau@etud.u-pem.fr>
+		Bryan LEE <blee@etud.u-pem.fr>
+*/
+
 #ifndef H_TABLE_SYMBOLES
 #define H_TABLE_SYMBOLES
 

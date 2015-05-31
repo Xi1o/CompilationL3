@@ -1,3 +1,9 @@
+/* PROJET COMPILATION L3 Informatique
+	Auteurs :
+		Raphaël CHENEAU <rcheneau@etud.u-pem.fr>
+		Bryan LEE <blee@etud.u-pem.fr>
+*/
+
 #include "table_symboles.h"
 #include <stdio.h>
 #include <string.h>

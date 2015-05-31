@@ -1,39 +1,56 @@
+/* PROJET COMPILATION L3 Informatique
+	Auteurs :
+		Raphaël CHENEAU <rcheneau@etud.u-pem.fr>
+		Bryan LEE <blee@etud.u-pem.fr>
+*/
+
 %{
 	#include <stdlib.h>
 	#include <stdio.h>
 	#include <unistd.h>
 	#include <string.h>
 	#include <ctype.h>
+	#include <unistd.h>
 	#include "table_symboles.h"
 
 	void yyerror(char*);
+	void inst(const char *);
+	void instarg(const char *, int);
+	void comment(const char *);
+	void setIndexFonction(char id[MAX_ID]);
+	void callFonction(char id[MAX_ID]);
+	void setFonction(int nb_args);
+
+	int setID(TS *ts, char id[MAX_ID]);
+	int getVal(TS *ts, char id[MAX_ID]);
+	int getDimSize(int *dimensions, int from, int n);
+
+	FILE* yyin;
+	FILE* output_stream; /* OPTION : fichier d'exportation du code machine */
+
+	TS ts[2]; /*Tables des symboles global + main.*/
+	TS *cur_ts; /*Pointeur table des symboles actuelle.*/
+	TSfonc ts_fonc; /*Table des symboles de fonctions.*/
+
 	int yylex();
 	int yylineno;
-	FILE* yyin;
 	int jump_label = 1; /*Valeur premier label.*/
 	int var_size; /*taille de la variable actuelle.*/
 	int is_tab; /*1 si tableau 0 sinon.*/
 	int tab; /*sauvegarde si is_tab a été mis à 1.*/
 	int cur_type; /*Type de la variable actuelle.*/
 	int last_free_adr = 0; /*Adresse pile libre disponible.*/
-	TS ts[2]; /*Tables des symboles global + main.*/
-	TS *cur_ts; /*Pointeur table des symboles actuelle.*/
-	TSfonc ts_fonc; /*Table des symboles de fonctions.*/
 	int cur_fonc; /*Indice de la fonction actuelle*/
 	int fst_fonc = 1; /*1 si c'est la 1ère fonction déclarée, 0 sinon*/
 	int decl_fonc = 1; /*1 si entrain de déclarer des fonctions, 0 sinon*/
 	int args_type[MAX_ARG]; /*Tableau contenant les types des arguments.*/
-	char args_id[MAX_ARG][MAX_ID]; /*Tableau contenant les identifiants des arguments.*/
 	int has_returned; /*0 si une fonction de type non void n'a pas return, 1 sinon.*/
-	void inst(const char *);
-	void instarg(const char *, int);
-	void comment(const char *);
-	int setID(TS *ts, char id[MAX_ID]);
-	int getVal(TS *ts, char id[MAX_ID]);
-	void setIndexFonction(char id[MAX_ID]);
-	void callFonction(char id[MAX_ID]);
-	void setFonction(int nb_args);
-	int getDimSize(int *dimensions, int from, int n);
+	int opt; /* OPTION : reconnaissance d'options */
+	int opt_o_used = 0 ; /* OPTION : 0 si l'option -o n'a pas été utilisée, 1 sinon */ 
+
+	char args_id[MAX_ARG][MAX_ID]; /*Tableau contenant les identifiants des arguments.*/
+	char opt_o_filename[500] = ""; /* OPTION : buffer to receive the exported .vm file */
+
 %}
 
 %locations
@@ -500,19 +517,19 @@ void yyerror(char* s) {
 }
 
 void endProgram() {
-	printf("HALT\n");
+	fprintf(output_stream, "HALT\n");
 }
 
 void inst(const char *s){
-	printf("%s\n",s);
+	fprintf(output_stream, "%s\n",s);
 }
 
 void instarg(const char *s,int n){
-	printf("%s\t%d\n",s,n);
+		fprintf(output_stream, "%s\t%d\n",s,n);
 }
 
 void comment(const char *s){
-	printf("#%s\n",s);
+		fprintf(output_stream, "#%s\n",s);
 }
 
 int getDimSize(int *dimensions, int from, int n){
@@ -679,17 +696,42 @@ void setFonction(int nb_args){
 }
 
 int main(int argc, char** argv) {
-	if(argc == 2){
-		yyin = fopen(argv[1], "r");
+
+	while( (opt = getopt(argc, argv, "o")) != -1 ) {
+		switch( opt ) {
+			case 'o':
+				opt_o_used = 1; /* -o utilisée, change la manière dont on print les instr */
+				break;
+			case '?':	return 1; /* stop après affichage auto de l'erreur "option inconnue" */
+		}
 	}
 
-	else if(argc == 1){
-		yyin = stdin;
+	/* rappel : après boucle getopt, optind contient l'index du 1er arg indépendant s'il existe */
+	if ( optind == argc ) { /* s'il n'y a pas d'argument indépendant */
+		fprintf(stderr, "usage: %s [-o] [FILE]\n", argv[0]);
+		fprintf(stderr, "  -o : Exporte le résultat de la compilation dans un fichier .vm\n");
+		return 1;		
 	}
-
-	else{
-		fprintf(stderr, "usage: %s [src]\n", argv[0]);
-		return 1;
+	else { /* sinon, y a un argument indépendant, ça devrait être le nom du fichier src */
+		yyin = fopen(argv[optind], "r"); /* tenter de l'ouvrir */
+		if ( !yyin ) {
+			fprintf(stderr, "Erreur : Echec ouverture du fichier \"%s\".\n", argv[optind]);
+			return 1;
+		}
+		/* ici, fichier ouvert avec succès */
+		if ( opt_o_used ) { /* si l'option -o a été utilisée */
+			strncpy(opt_o_filename, argv[optind], strlen(argv[optind])); /* opt_o_filename = nomFichierSource */
+			strncat(opt_o_filename, ".vm", 3); /* opt_o_filename = nomFichierSource.vm */
+			output_stream = fopen(opt_o_filename, "w"); /* open pour ecriture */
+			if ( !output_stream ) {
+				fprintf(stderr, "Erreur : Echec ouverture du fichier \"%s\".\n", opt_o_filename);
+				fprintf(stderr, "         Le résultat sera affiché sur la sortie standard.\n");
+				output_stream = stdout; /* On ne quitte pas, on utilise stdout comme sortie */
+			}
+		}
+		/* sinon, on assigne stdout à output_stream */
+		/* Astuce : dans ttes les fonctions qui print des instructions, on utilise fprintf(output_stream, ...) */
+		else output_stream = stdout;
 	}
 
 	init(&ts[0]);
