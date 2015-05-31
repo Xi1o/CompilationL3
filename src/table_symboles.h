@@ -10,6 +10,7 @@
 #define MAX_ID 32
 #define MAX_TABLE 1024
 #define MAX_ARG 64
+#define MAX_DIM 8
 #define VOID_ 0
 #define CONSTENT 1
 #define CONSTCAR 2
@@ -22,7 +23,7 @@ typedef struct{
   int taille;
   int adresse;
   int tab; /*0 ou nb dimension si est un tableau*/
-  int dimensions[5];
+  int dimensions[MAX_DIM];
 }Symbole;
 
 typedef struct{
