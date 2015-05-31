@@ -1,0 +1,103 @@
+const a = 25, b = 5;
+entier change_me;
+
+entier fact(entier n){
+	if(0 == n){
+		return 1;
+	}
+	return fact(n-1)*n;
+}
+
+entier add(entier a, entier b){
+	return a+b;
+}
+
+entier sub(entier a, entier b){
+	return a-b;
+}
+
+void change_globale(void){
+	change_me = 14;
+}
+
+entier abs(entier x){
+	if(x < 0){
+		return -x;
+	}
+	return x;
+}
+
+void print_until_n(entier n){
+	entier i;
+	i = 0;
+	
+	while(i < n){
+		print(i);
+		i = i + 1;
+	}
+}
+
+void print_add_sub(entier a, entier b){
+	print(add(a, b));
+	print(sub(a, b));
+}
+
+void print_3_car(caractere a, caractere b, caractere c){
+	print(a);
+	print(b);
+	print(c);
+	print('\n');
+}
+
+void print_inf(entier a, entier b){
+	if(a <= b){
+		print(a);
+	}
+	else{
+		print(b);
+	}
+}
+
+void print_sup(entier a, entier b){
+	if(a >= b){
+		print(a);
+	}
+	else{
+		print(b);
+	}
+}
+
+void print_readch(void){
+	print('r');
+	print('e');
+	print('a');
+	print('d');
+	print('c');
+	print('h');
+	print(':');
+	print(' ');
+}
+
+main(){
+	entier res_fact, n;
+	caractere car1, car2;
+
+	print(add(a, -b));
+	res_fact = fact(5);
+	print(res_fact);
+	change_me = 8;
+	print(change_me);
+	change_globale();
+	print(change_me);
+	read(n);
+	n = abs(n);
+	print_until_n(n);
+	print_add_sub(50, 5);
+
+	car2 = 'u';
+	print_readch();
+	readch(car1);
+	print_3_car(car1, car2, 'i');
+	print_inf(75, 90);
+	print_sup(75, 90);
+}

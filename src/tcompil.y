@@ -180,9 +180,9 @@ DeclFonct : DeclFonct DeclUneFonct
 	| DeclUneFonct;
 
 DeclUneFonct : EnTeteFonct {if(1 == fst_fonc){instarg("JUMP", 0);fst_fonc = 0;last_free_adr_tmp = last_free_adr;}comment("---DeclUneFonct");instarg("LABEL", jump_label++);last_free_adr = 0;setFonction($1);} Corps {
-		if(0 == has_returned) yyerror("Retour manquant.");
-		inst("RETURN");
-	};
+ 		if(0 == has_returned) yyerror("Retour manquant.");
+ 		inst("RETURN");
+ 	};
 
 EnTeteFonct : Type IDENT LPAR Parametres RPAR{
 		if(MAX_ARG == $4){
@@ -698,6 +698,13 @@ void setFonction(int nb_args){
 	}
 }
 
+/* Rôle : extraire l'extension d'un nom de fichier */
+const char *getExtension (const char *filename) {
+    char *ext = strrchr(filename, '.'); /* retourne pointeur sur la dernière occurrence de '.' dans filename */
+    if ( !ext ) ext = ""; /* pas d'extension */
+    return ext; /* si "fichier.tpc", retourne ".tpc" */
+}
+
 int main(int argc, char** argv) {
 
 	while( (opt = getopt(argc, argv, "o")) != -1 ) {
@@ -716,6 +723,11 @@ int main(int argc, char** argv) {
 		return 1;		
 	}
 	else { /* sinon, y a un argument indépendant, ça devrait être le nom du fichier src */
+		if ( 0 != strcmp(getExtension(argv[optind]), ".tpc") ) { /* si pas d'extension .tpc */
+			fprintf(stderr, "Erreur : Format de fichier non reconnu. Le format .tpc est requis.\n");
+			return 1;
+		}
+
 		yyin = fopen(argv[optind], "r"); /* tenter de l'ouvrir */
 		if ( !yyin ) {
 			fprintf(stderr, "Erreur : Echec ouverture du fichier \"%s\".\n", argv[optind]);
@@ -723,8 +735,8 @@ int main(int argc, char** argv) {
 		}
 		/* ici, fichier ouvert avec succès */
 		if ( opt_o_used ) { /* si l'option -o a été utilisée */
-			strncpy(opt_o_filename, argv[optind], strlen(argv[optind])); /* opt_o_filename = nomFichierSource */
-			strncat(opt_o_filename, ".vm", 3); /* opt_o_filename = nomFichierSource.vm */
+			strncpy(opt_o_filename, argv[optind], strlen(argv[optind])-4); /* Soit "prog.tpc", opt_o_filename = "prog" */
+			strncat(opt_o_filename, ".vm", 3); /* opt_o_filename = "prog.vm" */
 			output_stream = fopen(opt_o_filename, "w"); /* open pour ecriture */
 			if ( !output_stream ) {
 				fprintf(stderr, "Erreur : Echec ouverture du fichier \"%s\".\n", opt_o_filename);
