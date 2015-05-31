@@ -45,20 +45,46 @@ typedef struct{
   int index;
 }TSfonc;
 
+/**
+ * Initialisation d'une table des symboles.
+ * Initialise l'index à 0.
+*/
 void init(TS *ts);
 
+/**
+ * Insertion d'un nouveau symbole dans la table.
+ * Incrémente l'index de 1.
+ */
 void insert(TS *ts, int type, int adresse, char id[MAX_ID]);
 
+/**
+ * Met à la dimension d'indice i sa taille (tableaux).
+ */
 void setSizeDimension(TS *ts, int size, int i, int index);
 
+/**
+ * Sauvegarde le nombre de dimension que possède le tableau.
+ */
 void setDimension(TS *ts, int nb, int index);
 
+/**
+ * Sauvegarde la taille d'un élément dans la table des symboles à l'indice index.
+ */
 void setSize(TS *ts, int taille, int index);
 
+/**
+ * Retourne 1 si la table des symboles possède l'indentifiant id, 0 sinon.
+ */
 int contains(TS *ts, char id[MAX_ID]);
 
+/**
+ * Similaire à insert mais ici rempli une table des symboles pour les fonctions.
+ */
 void insertFonc(TSfonc *ts, int type, int adresse, char id[MAX_ID], int nb_args, char args_id[MAX_ARG][MAX_ID], int args_type[MAX_ARG]);
 
+/**
+ * Similaire à contains mais pour les fonctions, retourn 1 si contient la fonction id, 0 sinon.
+ */
 int containsFonc(TSfonc *ts, char id[MAX_ID]);
 
 #endif

@@ -1,7 +1,7 @@
 CC = gcc
 DBG = yes
-ifeq ($(DBG), yes)
-	CFLAGS = -g -Wall -I$(SDIR)
+ifeq ($(DBG), no)
+	CFLAGS = -g -Wall
 endif
 LDFLAGS = -lfl
 EXEC = tcompil
@@ -21,10 +21,10 @@ lex.yy.c: $(SDIR)$(EXEC).lex $(EXEC).h
 	flex $(SDIR)$(EXEC).lex
 
 table_symboles.o: $(SDIR)table_symboles.c $(SDIR)table_symboles.h
-	$(CC) -o $@ -c $< $(CFLAGS)
+	$(CC) -o $@ -c $< $(CFLAGS) -I$(SDIR)
 
 %.o: %.c
-	$(CC) -o $@ -c $< $(CFLAGS)
+	$(CC) -o $@ -c $< $(CFLAGS) -I$(SDIR)
 
 clean:
 	rm -f *.o lex.yy.c $(EXEC).[ch]

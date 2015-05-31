@@ -78,6 +78,7 @@ void print_readch(void){
 	print(' ');
 }
 
+/*commentaire*/
 main(){
 	entier res_fact, n;
 	caractere car1, car2;

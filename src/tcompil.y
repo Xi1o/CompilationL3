@@ -535,6 +535,9 @@ void comment(const char *s){
 		fprintf(output_stream, "#%s\n",s);
 }
 
+/*
+ * Retourne la taille du tableau des dimensions de from à n.
+*/
 int getDimSize(int *dimensions, int from, int n){
 	int i, res;
 	
@@ -553,7 +556,7 @@ void setArrIndex(TS *ts, int i, int mode){
 	int j, n;
 
 	n = ts->table[i].tab;
-	for(j = 0; j < n-1; j++){
+	for(j = 0; j < n-1; j++){ 
 		if(0 == mode) /*setID 1 élément en + sur la pile.*/
 			instarg("SET", n+1);
 		else /*getVal 1 élément en - sur la pile.*/
@@ -561,10 +564,10 @@ void setArrIndex(TS *ts, int i, int mode){
 		inst("SWAP");
 		inst("TOPST");
 		inst("SUB");
-		inst("LOAD");
+		inst("LOAD"); /*Récupère la valeur de l'indice de la dimension i.*/
 		inst("SWAP");
 		instarg("SET", getDimSize(ts->table[i].dimensions, j+1, n));
-		inst("MUL");
+		inst("MUL"); /*Multiplie chacunes des dimensions sauf la derniere par getDimSize.*/
 		inst("PUSH");		
 	}
 	if(0 == mode)
@@ -574,23 +577,29 @@ void setArrIndex(TS *ts, int i, int mode){
 	inst("SWAP");
 	inst("TOPST");
 	inst("SUB");
-	inst("LOAD");
+	inst("LOAD"); /*Récupère le dernier indice.*/
 	inst("SWAP");
 	for(j = 0; j < n-1; j++){
 		inst("POP");
-		inst("ADD");
+		inst("ADD"); /*Ajoute au dernier indice toutes les multiplications précédentes*/
 		inst("SWAP");
 	}
-	instarg("SET", ts->table[i].adresse);
+	instarg("SET", ts->table[i].adresse); /*Ajoute également l'adresse de base du tableau.*/
 	inst("ADD");
 }
 
+/*
+ * Affecte la valeur en tête de pile à l'identifiant id.
+ * Retourne le type de la variable id.
+*/
 int setID(TS *ts_locale, char id[MAX_ID]){
 	int i, adr, in_glob;
 	TS *ts_selec;
 
 	comment("---setID");
+	/*Cherche l'id dans la table des symboles locale.*/
 	if(-1 == (i = contains(ts_locale, id))){
+		/*Cherche alors dans les globales.*/
 		if(-1 == (i = contains(&ts[GLOB], id))){
 			fprintf(stderr, "Erreur : set ID <%s> inconnu.\n", id);
 			exit(EXIT_FAILURE);
@@ -625,6 +634,10 @@ int setID(TS *ts_locale, char id[MAX_ID]){
 	return ts_selec->table[i].type;
 }
 
+/*
+ * Récupère la valeur de l'identifiant id et la place en tête de pile.
+ * Retourne le type de la variable id.
+*/
 int getVal(TS *ts_locale, char id[MAX_ID]){
 	int i, adr, in_glob;
 	TS *ts_selec;
@@ -661,6 +674,9 @@ int getVal(TS *ts_locale, char id[MAX_ID]){
 	return ts_selec->table[i].type;
 }
 
+/*
+ * Place l'index cur_fonc sur la tables des symboles des fonctions de nom id.
+*/
 void setIndexFonction(char id[MAX_ID]){
 	if(-1 == (cur_fonc = containsFonc(&ts_fonc, id))){
 		fprintf(stderr, "Erreur : fonction id <%s> inconnu.\n", id);
@@ -668,6 +684,9 @@ void setIndexFonction(char id[MAX_ID]){
 	}
 }
 
+/*
+ * Écris l'instruction d'appel d'une fonction à l'adresse de la fonction d'indice cur_fonc.
+*/
 void callFonction(char id[MAX_ID]){
 	int adr;
 
@@ -676,6 +695,10 @@ void callFonction(char id[MAX_ID]){
 	instarg("CALL", adr);
 }
 
+/*
+ * Insert dans la table des symboles de la fonction actuelle les informations sur les arguments.
+ * Écris également les instructions nécessaire pour le chargement de ces variables sur la pile.
+*/
 void setFonction(int nb_args){
 	int i, type;
 	char *id_arg;
