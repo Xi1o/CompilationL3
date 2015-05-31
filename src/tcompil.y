@@ -725,7 +725,8 @@ int main(int argc, char** argv) {
 			output_stream = fopen(opt_o_filename, "w"); /* open pour ecriture */
 			if ( !output_stream ) {
 				fprintf(stderr, "Erreur : Echec ouverture du fichier \"%s\".\n", opt_o_filename);
-				return 1;
+				fprintf(stderr, "         Le résultat sera affiché sur la sortie standard.\n");
+				output_stream = stdout; /* On ne quitte pas, on utilise stdout comme sortie */
 			}
 		}
 		/* sinon, on assigne stdout à output_stream */
