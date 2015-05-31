@@ -18,6 +18,9 @@ void lyyerror(YYLTYPE *locp, const char *str){
 
 %%
 [ \t\n]+ ;
+"'\\n'" {yylval.car = '\n'; return CARACTERE;}
+"'\\t'" {yylval.car = '\t'; return CARACTERE;}
+ "/*".*"*/" ;
 
 [0-9]+ {sscanf(yytext, "%d", &yylval.val); return NUM;}
 "'"."'" {yylval.car = yytext[1]; return CARACTERE;}

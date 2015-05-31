@@ -294,6 +294,9 @@ Instr : LValue {tab=0;if(1==is_tab){tab=1;}} EGAL Exp PV {
 		else if(CARAC == $3){
 			inst("WRITECH");
 		}
+		else{
+			yyerror("Type inconnu.");
+		}
 		inst("PUSH");
 	}
 	| PV
@@ -437,7 +440,7 @@ Exp : Exp ADDSUB Exp {
 	}
 	| ADDSUB Exp{
 		comment("---ADDSUB unaire");
-		if(ENT != $1){
+		if(ENT != $2){
 			yyerror("+/- avec entiers seulement.");
 		}
 		if('-' == $1){
@@ -445,6 +448,7 @@ Exp : Exp ADDSUB Exp {
 			inst("NEG");
 			inst("PUSH");
 		}
+		$$ = ENT;
 	}
 	| Exp BOPE Exp{
 		comment("---BOPE");
