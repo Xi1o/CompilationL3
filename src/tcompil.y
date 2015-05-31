@@ -14,35 +14,43 @@
 	#include "table_symboles.h"
 
 	void yyerror(char*);
-	int yylex();
-	int yylineno;
+	void inst(const char *);
+	void instarg(const char *, int);
+	void comment(const char *);
+	void setIndexFonction(char id[MAX_ID]);
+	void callFonction(char id[MAX_ID]);
+	void setFonction(int nb_args);
+
+	int setID(TS *ts, char id[MAX_ID]);
+	int getVal(TS *ts, char id[MAX_ID]);
+	int getDimSize(int *dimensions, int from, int n);
+
 	FILE* yyin;
 	FILE* output_stream; /* OPTION : fichier d'exportation du code machine */
-	int jump_label = 1; /*Valeur premier label.*/
-	int var_size;
-	int is_tab;
-	int cur_type; /*Type de la variable actuelle.*/
-	int last_free_adr = 0; /*Adresse pile libre disponible.*/
+
 	TS ts[2]; /*Tables des symboles global + main.*/
 	TS *cur_ts; /*Pointeur table des symboles actuelle.*/
 	TSfonc ts_fonc; /*Table des symboles de fonctions.*/
+
+	int yylex();
+	int yylineno;
+	int jump_label = 1; /*Valeur premier label.*/
+	int var_size; /*taille de la variable actuelle.*/
+	int is_tab; /*1 si tableau 0 sinon.*/
+	int tab; /*sauvegarde si is_tab a été mis à 1.*/
+	int cur_type; /*Type de la variable actuelle.*/
+	int last_free_adr = 0; /*Adresse pile libre disponible.*/
 	int cur_fonc; /*Indice de la fonction actuelle*/
 	int fst_fonc = 1; /*1 si c'est la 1ère fonction déclarée, 0 sinon*/
 	int decl_fonc = 1; /*1 si entrain de déclarer des fonctions, 0 sinon*/
 	int args_type[MAX_ARG]; /*Tableau contenant les types des arguments.*/
-	char args_id[MAX_ARG][MAX_ID]; /*Tableau contenant les identifiants des arguments.*/
 	int has_returned; /*0 si une fonction de type non void n'a pas return, 1 sinon.*/
 	int opt; /* OPTION : reconnaissance d'options */
 	int opt_o_used = 0 ; /* OPTION : 0 si l'option -o n'a pas été utilisée, 1 sinon */ 
+
+	char args_id[MAX_ARG][MAX_ID]; /*Tableau contenant les identifiants des arguments.*/
 	char opt_o_filename[500] = ""; /* OPTION : buffer to receive the exported .vm file */
-	void inst(const char *);
-	void instarg(const char *, int);
-	void comment(const char *);
-	int setID(TS *ts, char id[MAX_ID]);
-	int getVal(TS *ts, char id[MAX_ID]);
-	void setIndexFonction(char id[MAX_ID]);
-	void callFonction(char id[MAX_ID]);
-	void setFonction(int nb_args);
+
 %}
 
 %locations
@@ -84,7 +92,7 @@
 %type <val> NUM ENTIER
 %type <car> CARACTERE
 %type <val> DeclConst ListConst DeclVar ListVar ListTypVar Parametres ListExp 
-%type <val> Jumpif Jumpelse Wlabel Jumpwhile EnTeteFonct Type
+%type <val> Jumpif Jumpelse Wlabel Jumpwhile EnTeteFonct Type Tab Ident
 %type <id> LValue
 %type <type> Exp Litteral
 
@@ -137,24 +145,27 @@ DeclVarPuisFonct : Type ListVar {instarg("ALLOC", $2);} PV DeclVarPuisFonct
 	| /*rien*/;
 
 ListVar : ListVar VRG Ident{
-		$$ = $1 + 1;
-		last_free_adr += 1;
+		$$ += $3;
 	}
 	| Ident{
-		$$ = 1;
-		last_free_adr += 1;
+		$$ = $1;
 	};
 
-Ident : IDENT {insert(cur_ts, cur_type, last_free_adr, $1);var_size = 1;is_tab = 0;} Tab
+Ident : IDENT {insert(cur_ts, cur_type, last_free_adr, $1);is_tab = 0;} Tab {
+		$$ = $3;
+		last_free_adr += $$;
+		setDimension(cur_ts, is_tab, cur_ts->index-1);
+	};
 
 Tab : Tab LSQB NUM RSQB{
+		setSizeDimension(cur_ts, $3, is_tab, cur_ts->index-1);
 		var_size = $3;
-		is_tab = 1;
-		instarg("ALLOC", var_size-1);
-		last_free_adr += var_size-1;
+		is_tab += 1;
+		$$ *= $3;
 	}
-	| /*rien*/ {
-		setSize(cur_ts, var_size, cur_ts->index-1, is_tab);
+	| /*rien*/ {	
+		setSize(cur_ts, 1, cur_ts->index-1);
+		$$ = 1;
 	};
 
 DeclMain : EnTeteMain {instarg("LABEL", 0);} Corps{
@@ -227,13 +238,14 @@ InstrComp : LACC SuiteInstr RACC;
 
 Type : TYPE {cur_type = $1; $$=$1;};
 
-Instr : LValue EGAL Exp PV {
+Instr : LValue {tab=0;if(1==is_tab){tab=1;}} EGAL Exp PV {
 		int type;
+		if(1 == tab) is_tab = 1;
 		type = setID(cur_ts, $1);
 		if(CONSTENT == type || CONSTCAR == type){
 			yyerror("Les constantes ne peuvent être modifiées.");
 		} 
-		if(type != $3){
+		if(type != $4){
 			yyerror("Type incorrecte.");
 		}
 	}
@@ -520,6 +532,56 @@ void comment(const char *s){
 		fprintf(output_stream, "#%s\n",s);
 }
 
+int getDimSize(int *dimensions, int from, int n){
+	int i, res;
+	
+	for(i = from, res = 1; i < n; i++){
+		res *= dimensions[i];
+	}
+	return res;
+}
+
+/*
+ * Place sur la pile l'adresse de l'indice i du tableau.
+ * mode 0 = setID
+ * mode 1 = getVal
+*/
+void setArrIndex(TS *ts, int i, int mode){
+	int j, n;
+
+	n = ts->table[i].tab;
+	for(j = 0; j < n-1; j++){
+		if(0 == mode) /*setID 1 élément en + sur la pile.*/
+			instarg("SET", n+1);
+		else /*getVal 1 élément en - sur la pile.*/
+			instarg("SET", n);
+		inst("SWAP");
+		inst("TOPST");
+		inst("SUB");
+		inst("LOAD");
+		inst("SWAP");
+		instarg("SET", getDimSize(ts->table[i].dimensions, j+1, n));
+		inst("MUL");
+		inst("PUSH");		
+	}
+	if(0 == mode)
+		instarg("SET", 2*(n+1)-(n+1));
+	else
+		instarg("SET", 2*(n+1)-(n+2));
+	inst("SWAP");
+	inst("TOPST");
+	inst("SUB");
+	inst("LOAD");
+	inst("SWAP");
+	for(j = 0; j < n-1; j++){
+		inst("POP");
+		inst("ADD");
+		inst("SWAP");
+	}
+	instarg("SET", ts->table[i].adresse);
+	inst("ADD");
+}
+
 int setID(TS *ts_locale, char id[MAX_ID]){
 	int i, adr, in_glob;
 	TS *ts_selec;
@@ -540,20 +602,14 @@ int setID(TS *ts_locale, char id[MAX_ID]){
 		in_glob = 0;
 	}
 	adr = ts_selec->table[i].adresse;
-	if(!is_tab){
+	if(0 == is_tab){
 		instarg("SET", adr);
 	}
 	else{
-		inst("POP");  /*reg1 -> val*/
-		inst("SWAP"); /*reg2 -> val*/
-		inst("POP"); /*reg1 -> i*/
-		inst("SWAP"); /*reg1 -> val / reg2 -> i*/
-		inst("PUSH");
-		instarg("SET", adr); /*reg1 -> adr*/
-		inst("ADD"); /*reg1 -> adr + i*/
+		setArrIndex(ts_selec, i, 0);
 	}
-		inst("SWAP");
-		inst("POP");
+	inst("SWAP");
+	inst("POP");
 	
 	/*Dans le main/globales.*/
 	if(0 == decl_fonc || 1 == in_glob){
@@ -588,9 +644,7 @@ int getVal(TS *ts_locale, char id[MAX_ID]){
 	adr = ts_selec->table[i].adresse;
 	instarg("SET", adr);
 	if(is_tab){
-		inst("SWAP");
-		inst("POP");
-		inst("ADD");
+		setArrIndex(ts_selec, i, 1);
 	}
 	/*Dans le main.*/
 	if(0 == decl_fonc || 1 == in_glob){
